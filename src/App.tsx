@@ -296,6 +296,18 @@ function MainAppContent() {
   const selectedShipment = shipments.find((s) => s.id === selectedShipmentId) || null;
   const docEditorShipment = shipments.find((s) => s.id === docEditorShipmentId) || null;
 
+  if (activeTab === 'landing') {
+    return (
+      <div className="min-h-screen bg-slate-950 text-white font-sans antialiased selection:bg-teal-500 selection:text-slate-950">
+        <LandingPage onStartDemo={() => setActiveTab('dashboard')} />
+        <AuthModal
+          isOpen={isAuthModalOpen}
+          onClose={() => setIsAuthModalOpen(false)}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans antialiased selection:bg-teal-500 selection:text-white">
       {/* Top Navbar */}
@@ -328,10 +340,6 @@ function MainAppContent() {
 
         {/* Main Content Area */}
         <main className="flex-1 overflow-y-auto p-6 md:p-8 space-y-6">
-          {activeTab === 'landing' && (
-            <LandingPage onStartDemo={() => setActiveTab('dashboard')} />
-          )}
-
           {activeTab === 'dashboard' && (
             <DashboardView
               shipments={shipments}

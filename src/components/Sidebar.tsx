@@ -101,7 +101,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Navigation List */}
-      <nav className="flex-1 px-2 py-2 space-y-1 overflow-y-auto">
+      <nav className="flex-1 px-2 py-2 space-y-1 overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
         {!isCollapsed && (
           <div className="px-3 pb-2 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
             ANA MENÜ
