@@ -1,4 +1,5 @@
 import React from 'react';
+import { ExPortaLogo } from './ExPortaLogo';
 import {
   LayoutDashboard,
   Users,
@@ -66,18 +67,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
           className="flex items-center space-x-3 cursor-pointer group overflow-hidden"
           title="ExPorta B2B Export OS"
         >
-          <div className="w-9 h-9 rounded-lg bg-teal-500 text-slate-950 flex items-center justify-center font-black text-xl tracking-wider shadow-xs group-hover:bg-teal-400 transition-colors shrink-0">
-            eX
-          </div>
-          {!isCollapsed && (
-            <div className="whitespace-nowrap transition-opacity duration-200">
-              <span className="text-white font-bold text-lg tracking-tight group-hover:text-teal-400 transition-colors">
-                ExPorta
-              </span>
-              <span className="block text-[10px] text-teal-400/90 tracking-widest font-mono uppercase">
-                B2B EXPORT OS
-              </span>
+          {isCollapsed ? (
+            <div className="w-9 h-9 rounded-lg bg-teal-500 text-slate-950 flex items-center justify-center font-black text-xl tracking-wider shadow-xs group-hover:bg-teal-400 transition-colors shrink-0">
+              eX
             </div>
+          ) : (
+            <ExPortaLogo variant="light" size="md" showSubtitle={true} />
           )}
         </div>
 

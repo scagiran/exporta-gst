@@ -1,48 +1,132 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Ship,
   FileText,
   FileCheck,
   Table,
-  Sliders,
-  CheckCircle2,
+  Check,
   ArrowRight,
   ShieldCheck,
   Globe2,
   Sparkles,
   Layers,
   Layout,
-  Download,
+  Building,
+  Zap,
+  HelpCircle,
 } from 'lucide-react';
+import { ExPortaLogo } from './ExPortaLogo';
 
 interface LandingPageProps {
   onStartDemo: () => void;
 }
 
 export const LandingPage: React.FC<LandingPageProps> = ({ onStartDemo }) => {
+  const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('annual');
+
+  const pricingPlans = [
+    {
+      id: 'free',
+      name: 'Başlangıç (Free)',
+      desc: 'İhracata yeni başlayan küçük işletmeler için temel seviye.',
+      monthlyPrice: '₺0',
+      annualPrice: '₺0',
+      period: 'Sonsuza Kadar Ücretsiz',
+      highlight: false,
+      badge: 'Ücretsiz',
+      features: [
+        '1 Kullanıcı Hesabı',
+        'Aylık 5 Master Sevkiyat',
+        '7 Aşamalı İhracat Belge Üretimi',
+        'Standart Belge Şablonu (Classic)',
+        'Müşteri & Ürün Katalog Yönetimi',
+        'PDF Belge İndirme & Yazdırma',
+      ],
+      ctaText: 'Ücretsiz Başlayın',
+    },
+    {
+      id: 'pro',
+      name: 'Profesyonel (Pro)',
+      desc: 'Düzenli ihracat yapan KOBİ\'ler için tam donanımlı operasyon paketi.',
+      monthlyPrice: '₺1.490',
+      annualPrice: '₺1.190',
+      period: 'Kullanıcı / Ay (Yıllık Ödeme)',
+      highlight: true,
+      badge: 'En Popüler',
+      features: [
+        'Sınırsız Master Sevkiyat Oluşturma',
+        '7 Aşamalı Otomatik Belge Workflow',
+        '3 Profesyonel Şablon (Classic, Modern, Compact)',
+        'Excel İçe/Dışa Aktarım (Müşteri & Ürün)',
+        'Özel Alan Tanımlama (Custom Fields)',
+        'Otomatik Belge Numaralandırma',
+        'Supabase Bulut Senkronizasyonu & Yedekleme',
+        'E-posta ile Müşteri Desteği',
+      ],
+      ctaText: '14 Gün Ücretsiz Deneyin',
+    },
+    {
+      id: 'business',
+      name: 'Kurumsal (Business)',
+      desc: 'Çoklu kullanıcı ve geniş ihracat ekibine sahip firmalar için.',
+      monthlyPrice: '₺3.990',
+      annualPrice: '₺3.190',
+      period: '5 Kullanıcı Dahil / Ay',
+      highlight: false,
+      badge: 'Çoklu Kullanıcı',
+      features: [
+        '5 Kullanıcıya Kadar Multi-Tenant Erişim',
+        'Gelişmiş Şirket Rol ve Yetkilendirme',
+        'Firmaya Özel Belge & Logo Şablonu',
+        'Sınırsız Veri Saklama ve Versiyonlama',
+        'Özel Gümrük & Acente Şablon Tasarımı',
+        'Öncelikli 7/24 VIP Destek',
+        'Özel Veri Dışa Aktarım API Erişimi',
+      ],
+      ctaText: 'Kurumsal Görüşme Yapın',
+    },
+  ];
+
+  const faqs = [
+    {
+      q: 'ExPorta verilerimi nerede saklıyor?',
+      a: 'Verileriniz şirket bazlı Row Level Security (RLS) ile izole edilmiş PostgreSQL veritabanımızda yüksek güvenlik standartları ile saklanır. Farklı şirketler verilerinize erişemez.',
+    },
+    {
+      q: 'Mevcut Excel müşteri ve ürün listemi aktarabilir miyim?',
+      a: 'Evet! Excel içe aktarım modülü sayesinde mevcut müşterilerinizi ve GTİP kodlu ürün kataloğunuzu saniyeler içinde ExPorta\'ya yükleyebilirsiniz.',
+    },
+    {
+      q: 'Fatura veya Proforma oluşturduğumda PDF olarak indirebilir miyim?',
+      a: 'Kesinlikle. Commercial Invoice, Packing List, Proforma ve diğer tüm 7 ihracat belgesini anında canlı önizleyebilir, PDF olarak indirebilir veya yazdırabilirsiniz.',
+    },
+    {
+      q: 'Ücretsiz deneme süresinde kredi kartı gerekiyor mu?',
+      a: 'Hayır! Kredi kartı bilgisi vermeden 14 gün boyunca Profesyonel paketin tüm özelliklerini deneyebilirsiniz.',
+    },
+  ];
+
   return (
     <div className="bg-slate-950 text-white min-h-screen font-sans selection:bg-teal-500 selection:text-slate-950">
-      {/* Top Navbar */}
+      {/* Top Header Navigation */}
       <header className="border-b border-slate-800 bg-slate-950/80 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center space-x-3 cursor-pointer" onClick={onStartDemo}>
-            <div className="w-9 h-9 rounded-lg bg-teal-500 text-slate-950 flex items-center justify-center font-black text-xl">
-              eX
-            </div>
-            <div>
-              <span className="text-white font-extrabold text-xl tracking-tight">ExPorta</span>
-              <span className="block text-[10px] text-teal-400 font-mono tracking-widest uppercase">
-                B2B EXPORT OPERATION OS
-              </span>
-            </div>
+          <div className="cursor-pointer" onClick={onStartDemo}>
+            <ExPortaLogo variant="light" size="md" showSubtitle={true} />
           </div>
 
           <div className="flex items-center space-x-4">
+            <a href="#pricing" className="text-xs text-slate-400 hover:text-white transition-colors hidden sm:block">
+              Fiyatlandırma
+            </a>
+            <a href="#features" className="text-xs text-slate-400 hover:text-white transition-colors hidden sm:block">
+              Özellikler
+            </a>
             <button
               onClick={onStartDemo}
               className="px-5 py-2.5 bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs rounded-lg transition-all shadow-md shadow-teal-500/20 flex items-center space-x-2"
             >
-              <span>Sisteme Giriş / Prototip Başlat</span>
+              <span>SaaS Uygulamasına Giriş</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>
@@ -53,7 +137,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartDemo }) => {
       <section className="py-20 px-6 max-w-7xl mx-auto text-center space-y-8 relative overflow-hidden">
         <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-teal-500/10 border border-teal-500/30 text-teal-400 text-xs font-semibold">
           <Sparkles className="w-3.5 h-3.5" />
-          <span>İhracatçı KOBİ'ler İçin Yeni Nesil B2B SaaS Arayüzü</span>
+          <span>İhracatçı KOBİ'ler İçin Yeni Nesil B2B Operasyon OS</span>
         </div>
 
         <h1 className="text-4xl md:text-6xl font-black text-white tracking-tight leading-tight max-w-4xl mx-auto">
@@ -69,7 +153,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartDemo }) => {
             onClick={onStartDemo}
             className="px-8 py-4 bg-teal-500 hover:bg-teal-400 text-slate-950 font-black text-sm rounded-xl shadow-lg shadow-teal-500/20 flex items-center space-x-3 transition-all transform hover:-translate-y-0.5"
           >
-            <span>Gerçek İhracat Sevkiyatını Deneyimleyin</span>
+            <span>Ücretsiz Hesabınızı Başlatın</span>
             <ArrowRight className="w-5 h-5" />
           </button>
         </div>
@@ -77,8 +161,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartDemo }) => {
         {/* Workflow Pipeline Diagram */}
         <div className="pt-12">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl max-w-5xl mx-auto">
-            <div className="text-xs font-mono font-bold text-teal-400 uppercase tracking-widest text-left mb-4">
-              MASTER WORKFLOW DÖNGÜSÜ (7 STEP DOCUMENT PIPELINE)
+            <div className="text-xs font-mono font-bold text-teal-400 uppercase tracking-widest text-left mb-4 flex items-center gap-2">
+              <Layers className="w-4 h-4" />
+              <span>MASTER WORKFLOW DÖNGÜSÜ (7 STEP DOCUMENT PIPELINE)</span>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 text-center text-xs">
               <div className="bg-slate-800 p-3 rounded-xl border border-slate-700">
@@ -122,9 +207,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartDemo }) => {
       </section>
 
       {/* Feature Grid Section */}
-      <section className="py-16 px-6 max-w-7xl mx-auto border-t border-slate-800">
+      <section id="features" className="py-16 px-6 max-w-7xl mx-auto border-t border-slate-800">
         <div className="text-center space-y-2 mb-12">
-          <span className="text-xs font-mono text-teal-400 font-bold uppercase tracking-widest">ÖNE ÇIKAN B2B Mimarİ</span>
+          <span className="text-xs font-mono text-teal-400 font-bold uppercase tracking-widest">ÖNE ÇIKAN B2B MİMARİ</span>
           <h2 className="text-3xl font-extrabold text-white">İhracat Operasyonunuz İçin Tasarlandı</h2>
         </div>
 
@@ -161,8 +246,128 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartDemo }) => {
         </div>
       </section>
 
+      {/* Pricing Section */}
+      <section id="pricing" className="py-20 px-6 max-w-7xl mx-auto border-t border-slate-800">
+        <div className="text-center space-y-4 mb-12">
+          <span className="text-xs font-mono text-teal-400 font-bold uppercase tracking-widest">ŞEFFAF VE UYGUN FİYATLANDIRMA</span>
+          <h2 className="text-3xl md:text-5xl font-black text-white">Şirketiniz İçin En Uygun Planı Seçin</h2>
+          <p className="text-slate-400 text-sm max-w-xl mx-auto">
+            Gizli ücret veya kurulum maliyeti yok. İster ücretsiz baslayın, ister kurumsal pakete geçin.
+          </p>
+
+          {/* Billing Switcher */}
+          <div className="pt-4 flex items-center justify-center space-x-4">
+            <span className={`text-xs font-semibold ${billingCycle === 'monthly' ? 'text-white' : 'text-slate-500'}`}>
+              Aylık Ödeme
+            </span>
+            <button
+              onClick={() => setBillingCycle(billingCycle === 'monthly' ? 'annual' : 'monthly')}
+              className="w-14 h-7 bg-slate-800 rounded-full p-1 border border-slate-700 transition-colors relative"
+            >
+              <div
+                className={`w-5 h-5 rounded-full bg-teal-400 transition-transform ${
+                  billingCycle === 'annual' ? 'translate-x-7' : 'translate-x-0'
+                }`}
+              />
+            </button>
+            <div className="flex items-center space-x-1.5">
+              <span className={`text-xs font-semibold ${billingCycle === 'annual' ? 'text-white' : 'text-slate-500'}`}>
+                Yıllık Ödeme
+              </span>
+              <span className="bg-teal-500/20 text-teal-400 text-[10px] font-bold px-2 py-0.5 rounded-full border border-teal-500/30">
+                %20 İndirimli
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Pricing Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-stretch">
+          {pricingPlans.map((plan) => {
+            const price = billingCycle === 'annual' ? plan.annualPrice : plan.monthlyPrice;
+            return (
+              <div
+                key={plan.id}
+                className={`rounded-2xl p-8 flex flex-col justify-between relative transition-all ${
+                  plan.highlight
+                    ? 'bg-slate-900 border-2 border-teal-500 shadow-2xl shadow-teal-500/10 transform md:-translate-y-2'
+                    : 'bg-slate-900/60 border border-slate-800'
+                }`}
+              >
+                {plan.highlight && (
+                  <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-teal-500 text-slate-950 text-[11px] font-black uppercase px-3 py-0.5 rounded-full tracking-wider shadow-sm">
+                    {plan.badge}
+                  </div>
+                )}
+
+                <div className="space-y-6">
+                  <div>
+                    <h3 className="text-xl font-bold text-white">{plan.name}</h3>
+                    <p className="text-xs text-slate-400 mt-1 min-h-[36px]">{plan.desc}</p>
+                  </div>
+
+                  <div className="border-t border-b border-slate-800/80 py-4">
+                    <div className="flex items-baseline space-x-1">
+                      <span className="text-4xl font-black text-white">{price}</span>
+                      {price !== '₺0' && <span className="text-xs text-slate-400">/ ay</span>}
+                    </div>
+                    <span className="text-[11px] text-teal-400 font-mono block mt-1">{plan.period}</span>
+                  </div>
+
+                  <ul className="space-y-3 text-xs text-slate-300">
+                    {plan.features.map((feat, idx) => (
+                      <li key={idx} className="flex items-center space-x-2.5">
+                        <Check className="w-4 h-4 text-teal-400 shrink-0" />
+                        <span>{feat}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="pt-8">
+                  <button
+                    onClick={onStartDemo}
+                    className={`w-full py-3 rounded-xl font-bold text-xs transition-all flex items-center justify-center space-x-2 ${
+                      plan.highlight
+                        ? 'bg-teal-500 hover:bg-teal-400 text-slate-950 shadow-lg shadow-teal-500/20'
+                        : 'bg-slate-800 hover:bg-slate-700 text-white border border-slate-700'
+                    }`}
+                  >
+                    <span>{plan.ctaText}</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* SSS (FAQ) Section */}
+      <section className="py-16 px-6 max-w-5xl mx-auto border-t border-slate-800 space-y-8">
+        <div className="text-center space-y-2">
+          <span className="text-xs font-mono text-teal-400 font-bold uppercase tracking-widest">AKLINIZA TAKILANLAR</span>
+          <h2 className="text-3xl font-extrabold text-white">Sıkça Sorulan Sorular</h2>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {faqs.map((faq, idx) => (
+            <div key={idx} className="bg-slate-900/60 border border-slate-800 p-6 rounded-2xl space-y-2">
+              <h4 className="font-bold text-sm text-white flex items-center gap-2">
+                <HelpCircle className="w-4 h-4 text-teal-400 shrink-0" />
+                <span>{faq.q}</span>
+              </h4>
+              <p className="text-xs text-slate-400 leading-relaxed pl-6">{faq.a}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
       {/* Footer */}
-      <footer className="border-t border-slate-800 py-8 text-center text-xs text-slate-500">
+      <footer className="border-t border-slate-800 py-10 text-center text-xs text-slate-500 space-y-4">
+        <div className="flex items-center justify-center">
+          <ExPortaLogo variant="light" size="sm" />
+        </div>
         <p>© 2026 ExPorta B2B Dış Ticaret Operasyon Platformu. Tüm hakları saklıdır.</p>
       </footer>
     </div>

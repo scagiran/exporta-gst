@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { X, Building2, Lock, Mail, ArrowRight, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { ExPortaLogo } from './ExPortaLogo';
+
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -77,14 +79,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
             <X className="w-5 h-5" />
           </button>
           
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center font-bold text-white shadow-lg shadow-blue-500/30">
-              EP
-            </div>
-            <div>
-              <h2 className="text-xl font-bold text-white">ExPorta B2B</h2>
-              <p className="text-xs text-slate-400">İhracat Operasyon ve Belge Yönetimi</p>
-            </div>
+          <div className="flex items-center justify-between mb-1">
+            <ExPortaLogo variant="light" size="md" showSubtitle={true} />
           </div>
         </div>
 
