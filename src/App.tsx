@@ -317,27 +317,35 @@ function MainAppContent() {
         <Sidebar
           activeTab={activeTab}
           setActiveTab={setActiveTab}
-          onboardingSteps={onboardingSteps}
+          onNewShipmentClick={() => {
+            setActiveTab('shipments');
+            setSelectedShipmentId(null);
+          }}
+          shipmentCount={shipments.length}
           isCollapsed={isSidebarCollapsed}
+          setIsCollapsed={setIsSidebarCollapsed}
         />
 
         {/* Main Content Area */}
         <main className="flex-1 overflow-y-auto p-6 md:p-8 space-y-6">
           {activeTab === 'landing' && (
-            <LandingPage onGoToApp={() => setActiveTab('dashboard')} />
+            <LandingPage onStartDemo={() => setActiveTab('dashboard')} />
           )}
 
           {activeTab === 'dashboard' && (
             <DashboardView
               shipments={shipments}
-              customers={customers}
-              products={products}
-              onNavigate={(tab, shipmentId) => {
-                setActiveTab(tab);
-                if (shipmentId) setSelectedShipmentId(shipmentId);
-              }}
               onboardingSteps={onboardingSteps}
+              onNavigateTab={(tab) => setActiveTab(tab)}
               onToggleOnboardingStep={handleToggleOnboardingStep}
+              onSelectShipment={(id) => {
+                setActiveTab('shipments');
+                setSelectedShipmentId(id);
+              }}
+              onNewShipmentClick={() => {
+                setActiveTab('shipments');
+                setSelectedShipmentId(null);
+              }}
             />
           )}
 
@@ -347,11 +355,8 @@ function MainAppContent() {
               customers={customers}
               products={products}
               customFields={customFields}
-              docNumberFormats={docNumberFormats}
               onSelectShipment={(id) => setSelectedShipmentId(id)}
               onAddShipment={handleAddShipment}
-              onDeleteShipment={handleDeleteShipment}
-              onOpenDocEditor={handleOpenDocEditor}
             />
           )}
 
@@ -361,14 +366,11 @@ function MainAppContent() {
               customers={customers}
               products={products}
               customFields={customFields}
-              companySettings={companySettings}
-              docNumberFormats={docNumberFormats}
               onBack={() => setSelectedShipmentId(null)}
               onUpdateShipment={handleUpdateShipment}
-              onOpenDocEditor={(docType) => handleOpenDocEditor(selectedShipment.id, docType)}
-              onUpdateDocStatus={(docType, status) =>
-                handleUpdateDocStatus(selectedShipment.id, docType, status)
-              }
+              onOpenDocEditor={(shipmentId, docType) => handleOpenDocEditor(shipmentId, docType)}
+              onUpdateDocNotes={handleUpdateDocNotes}
+              onResetDocument={handleResetDocument}
             />
           )}
 
@@ -403,11 +405,14 @@ function MainAppContent() {
           {activeTab === 'documents' && (
             <DocumentsHubView
               shipments={shipments}
-              onSelectShipmentDoc={(shipmentId, docType) => {
+              companySettings={companySettings}
+              onOpenDocEditor={(shipmentId, docType) => {
                 setActiveTab('shipments');
                 setSelectedShipmentId(shipmentId);
                 handleOpenDocEditor(shipmentId, docType);
               }}
+              onUpdateDocNotes={handleUpdateDocNotes}
+              onResetDocument={handleResetDocument}
             />
           )}
 
