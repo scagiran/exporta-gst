@@ -1,6 +1,6 @@
 import React from 'react';
 import { MasterShipment, DocType, DocTemplate, CompanySettings } from '../types/exporta';
-import { DOC_TYPE_NAMES } from '../lib/numbering';
+import { DOC_TYPE_NAMES, DOC_TYPE_ENGLISH_TITLES, toEnglishUpper } from '../lib/numbering';
 import { calculateVgmAndWeights } from '../lib/vgm';
 
 interface DocumentRendererProps {
@@ -49,14 +49,14 @@ export const DocumentRenderer: React.FC<DocumentRendererProps> = ({
   const totalGrossKg = vgmResult.actualVgmKg ?? vgmResult.totalDefaultGrossWeightKg;
 
   const currency = shipment.payment.currency || 'EUR';
-  const docTitle = DOC_TYPE_NAMES[docType] || docType.toUpperCase();
+  const docTitle = DOC_TYPE_ENGLISH_TITLES[docType] || toEnglishUpper(docType);
 
   /* ========================================================================
    * TEMPLATE 01: CLASSIC (Traditional Serif/Sans, double line box, classic logo)
    * ======================================================================== */
   if (template === 'classic') {
     return (
-      <div className="w-full bg-white text-slate-900 font-sans text-[11px] p-8 border border-slate-300 shadow-md min-h-[1050px] relative font-serif">
+      <div className="w-full bg-white text-slate-900 font-sans text-[11px] p-8 border border-slate-300 shadow-md min-h-[1050px] relative">
         {/* Top Header */}
         <div className="flex justify-between items-start pb-6 border-b-2 border-slate-800">
           <div className="space-y-1 max-w-sm font-sans">
@@ -67,7 +67,7 @@ export const DocumentRenderer: React.FC<DocumentRendererProps> = ({
           </div>
 
           <div className="text-right space-y-1">
-            <h2 className="text-xl font-black text-slate-900 tracking-wider font-mono uppercase">{docTitle.split('(')[0]}</h2>
+            <h2 className="text-xl font-black text-slate-900 tracking-wider font-mono">{toEnglishUpper(docTitle)}</h2>
             <div className="font-mono text-xs font-bold text-slate-800 bg-slate-100 px-3 py-1 rounded inline-block border border-slate-300">
               No: {docInfo.docNumber}
             </div>
@@ -279,8 +279,8 @@ export const DocumentRenderer: React.FC<DocumentRendererProps> = ({
           </div>
 
           <div className="text-right">
-            <span className="px-3 py-1 bg-teal-50 text-teal-800 text-xs font-black rounded border border-teal-200 font-mono inline-block mb-1 uppercase">
-              {docTitle.split('(')[0]}
+            <span className="px-3 py-1 bg-teal-50 text-teal-800 text-xs font-black rounded border border-teal-200 font-mono inline-block mb-1">
+              {toEnglishUpper(docTitle)}
             </span>
             <div className="text-sm font-extrabold font-mono text-slate-900">{docInfo.docNumber}</div>
             <p className="text-[10px] text-slate-500">Düzenleme Tarihi: {docInfo.updatedAt}</p>
@@ -435,7 +435,7 @@ export const DocumentRenderer: React.FC<DocumentRendererProps> = ({
           <p className="text-[9px] text-slate-600">{companySettings.address} | Tax: {companySettings.taxNo}</p>
         </div>
         <div className="text-right">
-          <h2 className="text-base font-black font-mono text-slate-900 uppercase">{docTitle.split('(')[0]}</h2>
+          <h2 className="text-base font-black font-mono text-slate-900">{toEnglishUpper(docTitle)}</h2>
           <div className="font-mono text-xs font-bold text-slate-800">{docInfo.docNumber}</div>
         </div>
       </div>

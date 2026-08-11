@@ -62,6 +62,29 @@ export const DOC_TYPE_NAMES: Record<DocType, string> = {
   shipping_instruction: 'Shipping Instruction (Yükleme Talimatı)',
 };
 
+export const DOC_TYPE_ENGLISH_TITLES: Record<DocType, string> = {
+  quotation: 'QUOTATION',
+  proforma: 'PROFORMA INVOICE',
+  sales_order: 'SALES ORDER',
+  actual_loading: 'ACTUAL LOADING LIST',
+  commercial_invoice: 'COMMERCIAL INVOICE',
+  packing_list: 'PACKING LIST',
+  shipping_instruction: 'SHIPPING INSTRUCTION',
+};
+
+/**
+ * Converts English text to clean UPPERCASE ensuring no Turkish dotted 'İ' or 'ı' appears.
+ */
+export function toEnglishUpper(str: string): string {
+  if (!str) return '';
+  return str
+    .replace(/i/g, 'I')
+    .replace(/İ/g, 'I')
+    .replace(/ı/g, 'I')
+    .toUpperCase();
+}
+
+
 export function generateDocNumber(
   cfg: DocNumberFormat,
   customer?: Customer | { code?: string },
