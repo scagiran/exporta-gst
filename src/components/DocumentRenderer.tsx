@@ -460,6 +460,7 @@ export const DocumentRenderer: React.FC<DocumentRendererProps> = ({
         <thead className="bg-slate-100 font-bold uppercase border-b border-slate-300">
           {isPackingList ? (
             <tr>
+              {showImages && <th className="p-1.5 border border-slate-300 text-center">Görsel</th>}
               <th className="p-1.5 border border-slate-300">Code</th>
               <th className="p-1.5 border border-slate-300">Description</th>
               <th className="p-1.5 border border-slate-300">HS Code</th>
@@ -469,6 +470,7 @@ export const DocumentRenderer: React.FC<DocumentRendererProps> = ({
             </tr>
           ) : (
             <tr>
+              {showImages && <th className="p-1.5 border border-slate-300 text-center">Görsel</th>}
               <th className="p-1.5 border border-slate-300">Code</th>
               <th className="p-1.5 border border-slate-300">Description</th>
               <th className="p-1.5 border border-slate-300">HS Code</th>
@@ -481,6 +483,15 @@ export const DocumentRenderer: React.FC<DocumentRendererProps> = ({
         <tbody>
           {items.map((item) => (
             <tr key={item.id} className="border-b border-slate-200">
+              {showImages && (
+                <td className="p-1 border border-slate-200 text-center">
+                  {item.imageUrl ? (
+                    <img src={item.imageUrl} alt={item.productName} className="w-8 h-8 object-cover rounded border border-slate-200 mx-auto" />
+                  ) : (
+                    <span className="text-slate-400 text-[8px]">-</span>
+                  )}
+                </td>
+              )}
               <td className="p-1.5 border border-slate-200 font-mono font-bold">{item.productCode}</td>
               <td className="p-1.5 border border-slate-200">{item.productName}</td>
               <td className="p-1.5 border border-slate-200 font-mono">{item.hsCode}</td>
@@ -500,6 +511,30 @@ export const DocumentRenderer: React.FC<DocumentRendererProps> = ({
           ))}
         </tbody>
       </table>
+
+      {/* Product Visual Presentation Section in COMPACT */}
+      {showImages && (
+        <div className="my-3 bg-slate-50 p-3 rounded border border-slate-300 space-y-2">
+          <div className="flex items-center justify-between border-b border-slate-200 pb-1">
+            <span className="text-[10px] font-bold text-slate-800 uppercase tracking-wide">ÜRÜN GÖRSEL SUNUMU (PRODUCT PRESENTATION)</span>
+            <span className="text-[8px] text-slate-500 font-mono">Görsel Katalog Katmanı</span>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            {items.map((item) => (
+              <div key={item.id} className="bg-white p-2 rounded border border-slate-200 flex flex-col items-center text-center space-y-1">
+                {item.imageUrl ? (
+                  <img src={item.imageUrl} alt={item.productName} className="w-16 h-14 object-cover rounded border border-slate-200" />
+                ) : (
+                  <div className="w-16 h-14 bg-slate-100 rounded border border-slate-200 flex items-center justify-center text-slate-400 text-[8px]">Görsel Yok</div>
+                )}
+                <div className="font-mono text-[8px] font-bold text-slate-800">{item.productCode}</div>
+                <div className="font-semibold text-[9px] text-slate-900 line-clamp-1">{item.productName}</div>
+                <div className="text-[8px] text-slate-600 font-mono font-bold">{item.unitPrice.toFixed(2)} {currency} / {item.unit}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="flex justify-between items-start my-3 text-[9px]">
         <div className="p-2 border border-slate-300 rounded max-w-xs space-y-0.5">
