@@ -1,0 +1,6 @@
+{
+  "name": "ExPorta",
+  "description": "B2B dış ticaret operasyon platformu - Sevkiyat yönetimi, 7 aşamalı belge workflow, özel alanlar, şablonlar ve canlı belge önizleme.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
