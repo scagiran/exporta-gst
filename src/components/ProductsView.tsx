@@ -171,6 +171,10 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
                         src={prd.imageUrl}
                         alt={prd.name}
                         className="w-10 h-10 object-cover rounded-lg border border-slate-200 shadow-2xs"
+                        onError={(e) => {
+                          e.currentTarget.onerror = null;
+                          e.currentTarget.src = 'https://images.unsplash.com/photo-1556911220-e15b29be8c8f?w=400&auto=format&fit=crop&q=80';
+                        }}
                       />
                     ) : (
                       <div className="w-10 h-10 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400">

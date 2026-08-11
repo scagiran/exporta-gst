@@ -61,16 +61,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
       } bg-slate-900 text-slate-300 flex flex-col h-screen border-r border-slate-800 shrink-0 sticky top-0 transition-all duration-300 ease-in-out z-40`}
     >
       {/* Brand Logo & Name & Collapse Toggle */}
-      <div className="p-4 flex items-center justify-between border-b border-slate-800">
+      <div className={`p-3.5 flex items-center border-b border-slate-800 ${isCollapsed ? 'justify-center flex-col space-y-2' : 'justify-between'}`}>
         <div 
           onClick={() => setActiveTab('dashboard')} 
-          className="flex items-center space-x-3 cursor-pointer group overflow-hidden"
+          className="flex items-center cursor-pointer group shrink-0"
           title="ExPorta B2B Export OS"
         >
           {isCollapsed ? (
-            <div className="w-9 h-9 rounded-lg bg-teal-500 text-slate-950 flex items-center justify-center font-black text-xl tracking-wider shadow-xs group-hover:bg-teal-400 transition-colors shrink-0">
-              eX
-            </div>
+            <ExPortaLogo isCollapsedMark={true} variant="light" />
           ) : (
             <ExPortaLogo variant="light" size="md" showSubtitle={true} />
           )}
@@ -80,7 +78,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <button
           onClick={() => setIsCollapsed((prev) => !prev)}
           className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-          title={isCollapsed ? 'Menüyü Genişlet' : 'Menüyü Daralt (Otomatik Sakla)'}
+          title={isCollapsed ? 'Menüyü Genişlet' : 'Menüyü Daralt'}
         >
           {isCollapsed ? <PanelLeftOpen className="w-5 h-5 text-teal-400" /> : <PanelLeftClose className="w-5 h-5" />}
         </button>
