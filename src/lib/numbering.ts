@@ -11,7 +11,7 @@ export const DEFAULT_NUMBER_FORMATS: Record<DocType, DocNumberFormat> = {
   proforma: {
     docType: 'proforma',
     prefix: 'PI',
-    format: 'PI-{YYYYMM}-{CUSTOMER}-{SEQ}',
+    format: '{PREFIX}-{YYYYMM}-{CUSTOMER}-{SEQ}',
     nextSeq: 1,
     seqLength: 3,
   },
@@ -32,7 +32,7 @@ export const DEFAULT_NUMBER_FORMATS: Record<DocType, DocNumberFormat> = {
   commercial_invoice: {
     docType: 'commercial_invoice',
     prefix: 'INV',
-    format: 'INV-{YYYY}-{CUSTOMER}-{SEQ}',
+    format: '{PREFIX}-{YYYY}-{CUSTOMER}-{SEQ}',
     nextSeq: 1,
     seqLength: 3,
   },

@@ -24,6 +24,8 @@ import {
   saveShipment,
   deleteShipment as dbDeleteShipment,
   saveCompanySettings,
+  fetchOrgPreferences,
+  saveOrgPreferences,
 } from './lib/supabaseService';
 
 import {
@@ -38,6 +40,8 @@ import {
   DocStatus,
   DocNumberFormat,
   DocNumberHistory,
+  NoteItem,
+  OrgPreferences,
 } from './types/exporta';
 
 import {
@@ -47,9 +51,10 @@ import {
   INITIAL_CUSTOM_FIELDS,
   INITIAL_SHIPMENTS,
   INITIAL_ONBOARDING_STEPS,
+  INITIAL_NOTES,
 } from './data/initialDemoData';
 
-import { DEFAULT_NUMBER_FORMATS } from './lib/numbering';
+import { DEFAULT_NUMBER_FORMATS, generateDocNumber } from './lib/numbering';
 
 function MainAppContent() {
   const { user, organization } = useAuth();
@@ -68,6 +73,7 @@ function MainAppContent() {
   const [onboardingSteps, setOnboardingSteps] = useState<OnboardingStep[]>(INITIAL_ONBOARDING_STEPS);
   const [docNumberFormats, setDocNumberFormats] = useState<Record<DocType, DocNumberFormat>>(DEFAULT_NUMBER_FORMATS);
   const [numberHistory, setNumberHistory] = useState<DocNumberHistory[]>([]);
+  const [notes, setNotes] = useState<NoteItem[]>(INITIAL_NOTES);
 
   // Modal States
   const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
@@ -90,14 +96,57 @@ function MainAppContent() {
           if (data.companySettings) setCompanySettings(data.companySettings);
         }
       });
+
+      fetchOrgPreferences(organization.id).then((prefs) => {
+        if (!prefs) return;
+        if (prefs.docNumberFormats) {
+          // Merge over the defaults so a newly added DocType never comes back undefined.
+          setDocNumberFormats({ ...DEFAULT_NUMBER_FORMATS, ...prefs.docNumberFormats });
+        }
+        if (prefs.customFields) setCustomFields(prefs.customFields);
+        if (prefs.numberHistory) setNumberHistory(prefs.numberHistory);
+        if (prefs.notes) setNotes(prefs.notes);
+        if (prefs.onboardingSteps) setOnboardingSteps(prefs.onboardingSteps);
+      });
     } else {
       // Revert to demo data if logged out
       setCompanySettings(INITIAL_COMPANY_SETTINGS);
       setCustomers(INITIAL_CUSTOMERS);
       setProducts(INITIAL_PRODUCTS);
       setShipments(INITIAL_SHIPMENTS);
+      setCustomFields(INITIAL_CUSTOM_FIELDS);
+      setOnboardingSteps(INITIAL_ONBOARDING_STEPS);
+      setDocNumberFormats(DEFAULT_NUMBER_FORMATS);
+      setNumberHistory([]);
+      setNotes(INITIAL_NOTES);
     }
   }, [organization?.id]);
+
+  /**
+   * Writes the organization preference blob (numbering, custom fields, notes,
+   * onboarding, numbering audit log) back to Supabase. Callers pass only the
+   * slice they just changed; the rest is taken from current state.
+   */
+  const persistPrefs = (overrides: Partial<OrgPreferences>) => {
+    if (!organization?.id) {
+      console.warn('[ExPorta] Organizasyon yüklenmediği için tercihler kaydedilmedi.');
+      alert('Ayarlar kaydedilemedi: oturumunuza bağlı bir organizasyon bulunamadı. Lütfen çıkış yapıp tekrar giriş yapın.');
+      return;
+    }
+
+    saveOrgPreferences(organization.id, {
+      docNumberFormats,
+      customFields,
+      numberHistory,
+      notes,
+      onboardingSteps,
+      ...overrides,
+    }).then(({ error }) => {
+      if (error) {
+        alert(`Ayarlar veritabanına kaydedilemedi:\n\n${error.message}\n\nDeğişiklik sayfayı yenileyince kaybolacak.`);
+      }
+    });
+  };
 
   // Customer Actions
   const handleAddCustomer = (newCust: Customer) => {
@@ -169,23 +218,75 @@ function MainAppContent() {
 
   // Custom Field Actions
   const handleAddCustomField = (field: CustomField) => {
-    setCustomFields((prev) => [...prev, field]);
+    const next = [...customFields, field];
+    setCustomFields(next);
+    persistPrefs({ customFields: next });
   };
 
   const handleDeleteCustomField = (id: string) => {
-    setCustomFields((prev) => prev.filter((cf) => cf.id !== id));
+    const next = customFields.filter((cf) => cf.id !== id);
+    setCustomFields(next);
+    persistPrefs({ customFields: next });
   };
 
-  // Numbering Format Actions
-  const handleUpdateNumberFormat = (docType: DocType, format: DocNumberFormat) => {
-    setDocNumberFormats((prev) => ({ ...prev, [docType]: format }));
+  // Numbering Format Actions — records an audit entry for every format change
+  const handleUpdateNumberFormat = (docType: DocType, format: DocNumberFormat, reason: string) => {
+    const previous = docNumberFormats[docType];
+    const sampleCustomer = { code: 'ELEK' };
+
+    const entry: DocNumberHistory = {
+      id: `nh-${Date.now()}`,
+      docType,
+      oldNumber: generateDocNumber(previous, sampleCustomer),
+      newNumber: generateDocNumber(format, sampleCustomer),
+      changedBy: user?.email || 'Anonim kullanıcı',
+      changedAt: new Date().toISOString().split('T')[0],
+      reason,
+    };
+
+    const nextFormats = { ...docNumberFormats, [docType]: format };
+    const nextHistory = [entry, ...numberHistory];
+
+    setDocNumberFormats(nextFormats);
+    setNumberHistory(nextHistory);
+    persistPrefs({ docNumberFormats: nextFormats, numberHistory: nextHistory });
+  };
+
+  /** Advances nextSeq for every document type after a shipment consumed the current numbers. */
+  const handleConsumeDocNumberSeqs = () => {
+    const nextFormats = { ...docNumberFormats };
+    (Object.keys(nextFormats) as DocType[]).forEach((dt) => {
+      nextFormats[dt] = { ...nextFormats[dt], nextSeq: nextFormats[dt].nextSeq + 1 };
+    });
+
+    setDocNumberFormats(nextFormats);
+    persistPrefs({ docNumberFormats: nextFormats });
+  };
+
+  // Notes Actions
+  const handleAddNote = (note: NoteItem) => {
+    const next = [note, ...notes];
+    setNotes(next);
+    persistPrefs({ notes: next });
+  };
+
+  const handleToggleNote = (id: string) => {
+    const next = notes.map((n) => (n.id === id ? { ...n, completed: !n.completed } : n));
+    setNotes(next);
+    persistPrefs({ notes: next });
+  };
+
+  const handleDeleteNote = (id: string) => {
+    const next = notes.filter((n) => n.id !== id);
+    setNotes(next);
+    persistPrefs({ notes: next });
   };
 
   // Onboarding Toggle
   const handleToggleOnboardingStep = (id: number) => {
-    setOnboardingSteps((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, completed: !s.completed } : s))
-    );
+    const next = onboardingSteps.map((s) => (s.id === id ? { ...s, completed: !s.completed } : s));
+    setOnboardingSteps(next);
+    persistPrefs({ onboardingSteps: next });
   };
 
   // Open Document Editor Modal
@@ -363,8 +464,10 @@ function MainAppContent() {
               customers={customers}
               products={products}
               customFields={customFields}
+              docNumberFormats={docNumberFormats}
               onSelectShipment={(id) => setSelectedShipmentId(id)}
               onAddShipment={handleAddShipment}
+              onConsumeDocNumberSeqs={handleConsumeDocNumberSeqs}
             />
           )}
 
@@ -424,7 +527,14 @@ function MainAppContent() {
             />
           )}
 
-          {activeTab === 'notes' && <NotesView />}
+          {activeTab === 'notes' && (
+            <NotesView
+              notes={notes}
+              onAddNote={handleAddNote}
+              onToggleNote={handleToggleNote}
+              onDeleteNote={handleDeleteNote}
+            />
+          )}
 
           {activeTab === 'settings' && (
             <SettingsView

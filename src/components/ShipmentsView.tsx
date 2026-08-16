@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { MasterShipment, Customer, Product, DocType, CustomField, DocumentInfo } from '../types/exporta';
-import { DEFAULT_NUMBER_FORMATS, generateDocNumber } from '../lib/numbering';
+import { MasterShipment, Customer, Product, DocType, CustomField, DocumentInfo, DocNumberFormat } from '../types/exporta';
+import { generateDocNumber } from '../lib/numbering';
 import { Ship, Plus, Search, FileCheck, AlertTriangle, ChevronRight, Calendar, ArrowRight, Building, Check } from 'lucide-react';
 
 interface ShipmentsViewProps {
@@ -8,8 +8,11 @@ interface ShipmentsViewProps {
   customers: Customer[];
   products: Product[];
   customFields: CustomField[];
+  docNumberFormats: Record<DocType, DocNumberFormat>;
   onSelectShipment: (id: string) => void;
   onAddShipment: (shipment: MasterShipment) => void;
+  /** Advances the stored nextSeq of every document type after a shipment is created. */
+  onConsumeDocNumberSeqs: () => void;
 }
 
 export const ShipmentsView: React.FC<ShipmentsViewProps> = ({
@@ -17,8 +20,10 @@ export const ShipmentsView: React.FC<ShipmentsViewProps> = ({
   customers,
   products,
   customFields,
+  docNumberFormats,
   onSelectShipment,
   onAddShipment,
+  onConsumeDocNumberSeqs,
 }) => {
   const [search, setSearch] = useState('');
   const [isWizardOpen, setIsWizardOpen] = useState(false);
@@ -97,7 +102,7 @@ export const ShipmentsView: React.FC<ShipmentsViewProps> = ({
       documents: {
         quotation: {
           docType: 'quotation',
-          docNumber: generateDocNumber(DEFAULT_NUMBER_FORMATS.quotation, cust, nextSeq),
+          docNumber: generateDocNumber(docNumberFormats.quotation, cust),
           status: 'hazir',
           template: 'classic',
           createdAt: today,
@@ -105,7 +110,7 @@ export const ShipmentsView: React.FC<ShipmentsViewProps> = ({
         },
         proforma: {
           docType: 'proforma',
-          docNumber: generateDocNumber(DEFAULT_NUMBER_FORMATS.proforma, cust, nextSeq),
+          docNumber: generateDocNumber(docNumberFormats.proforma, cust),
           status: 'taslak',
           template: 'classic',
           createdAt: today,
@@ -113,7 +118,7 @@ export const ShipmentsView: React.FC<ShipmentsViewProps> = ({
         },
         sales_order: {
           docType: 'sales_order',
-          docNumber: generateDocNumber(DEFAULT_NUMBER_FORMATS.sales_order, cust, nextSeq),
+          docNumber: generateDocNumber(docNumberFormats.sales_order, cust),
           status: 'eksik',
           template: 'classic',
           createdAt: today,
@@ -121,7 +126,7 @@ export const ShipmentsView: React.FC<ShipmentsViewProps> = ({
         },
         actual_loading: {
           docType: 'actual_loading',
-          docNumber: generateDocNumber(DEFAULT_NUMBER_FORMATS.actual_loading, cust, nextSeq),
+          docNumber: generateDocNumber(docNumberFormats.actual_loading, cust),
           status: 'eksik',
           template: 'modern',
           createdAt: today,
@@ -129,7 +134,7 @@ export const ShipmentsView: React.FC<ShipmentsViewProps> = ({
         },
         commercial_invoice: {
           docType: 'commercial_invoice',
-          docNumber: generateDocNumber(DEFAULT_NUMBER_FORMATS.commercial_invoice, cust, nextSeq),
+          docNumber: generateDocNumber(docNumberFormats.commercial_invoice, cust),
           status: 'eksik',
           template: 'modern',
           createdAt: today,
@@ -137,7 +142,7 @@ export const ShipmentsView: React.FC<ShipmentsViewProps> = ({
         },
         packing_list: {
           docType: 'packing_list',
-          docNumber: generateDocNumber(DEFAULT_NUMBER_FORMATS.packing_list, cust, nextSeq),
+          docNumber: generateDocNumber(docNumberFormats.packing_list, cust),
           status: 'eksik',
           template: 'compact',
           createdAt: today,
@@ -145,7 +150,7 @@ export const ShipmentsView: React.FC<ShipmentsViewProps> = ({
         },
         shipping_instruction: {
           docType: 'shipping_instruction',
-          docNumber: generateDocNumber(DEFAULT_NUMBER_FORMATS.shipping_instruction, cust, nextSeq),
+          docNumber: generateDocNumber(docNumberFormats.shipping_instruction, cust),
           status: 'eksik',
           template: 'modern',
           createdAt: today,
@@ -155,6 +160,7 @@ export const ShipmentsView: React.FC<ShipmentsViewProps> = ({
     };
 
     onAddShipment(newShipment);
+    onConsumeDocNumberSeqs();
     setIsWizardOpen(false);
     onSelectShipment(newShipment.id);
   };

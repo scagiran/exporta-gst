@@ -1,74 +1,43 @@
 import React, { useState } from 'react';
+import { NoteItem, NoteCategory } from '../types/exporta';
 import { StickyNote, Plus, Trash2, CheckCircle2, ShieldAlert, Sparkles, FileText, Globe } from 'lucide-react';
 
-interface NoteItem {
-  id: string;
-  title: string;
-  category: 'Gümrük Mevzuatı' | 'Müşteri Talebi' | 'Lojistik' | 'Ödeme & Banka';
-  content: string;
-  createdAt: string;
-  completed: boolean;
+interface NotesViewProps {
+  notes: NoteItem[];
+  onAddNote: (note: NoteItem) => void;
+  onToggleNote: (id: string) => void;
+  onDeleteNote: (id: string) => void;
 }
 
-export const NotesView: React.FC = () => {
-  const [notes, setNotes] = useState<NoteItem[]>([
-    {
-      id: 'n-1',
-      title: 'Almanya AB A.TR Dolaşım Belgesi Gereksinimi',
-      category: 'Gümrük Mevzuatı',
-      content: 'Hamburg teslimatlarında gümrük vergisi muafiyeti için gümrük müşavirimize elektronik A.TR vizesi iletilmelidir.',
-      createdAt: '2026-08-08',
-      completed: true,
-    },
-    {
-      id: 'n-2',
-      title: 'ABD Akreditif (L/C) 45 Gün Vadeli Belge İbrazı',
-      category: 'Ödeme & Banka',
-      content: 'Chicago Global Trade sevkiyatı için konşimento tarihi itibaren 21 gün içinde İş Bankası Ostim şubesine 3 nüsha Commercial Invoice sunulacak.',
-      createdAt: '2026-08-09',
-      completed: false,
-    },
-    {
-      id: 'n-3',
-      title: 'Dubai Jebel Ali Serbest Bölge Konşimento Talimatı',
-      category: 'Lojistik',
-      content: 'Consignee kısmına Levant Import FZE yazılmalı, Notify Party kısmına acente adı eklenmelidir.',
-      createdAt: '2026-08-10',
-      completed: false,
-    },
-  ]);
-
+export const NotesView: React.FC<NotesViewProps> = ({
+  notes,
+  onAddNote,
+  onToggleNote,
+  onDeleteNote,
+}) => {
   const [newTitle, setNewTitle] = useState('');
-  const [newCategory, setNewCategory] = useState<'Gümrük Mevzuatı' | 'Müşteri Talebi' | 'Lojistik' | 'Ödeme & Banka'>('Gümrük Mevzuatı');
+  const [newCategory, setNewCategory] = useState<NoteCategory>('Gümrük Mevzuatı');
   const [newContent, setNewContent] = useState('');
 
   const handleAddNote = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle.trim()) return;
 
-    const note: NoteItem = {
+    onAddNote({
       id: `note-${Date.now()}`,
       title: newTitle,
       category: newCategory,
       content: newContent,
       createdAt: new Date().toISOString().split('T')[0],
       completed: false,
-    };
+    });
 
-    setNotes([note, ...notes]);
     setNewTitle('');
     setNewContent('');
   };
 
-  const handleToggleNote = (id: string) => {
-    setNotes((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, completed: !n.completed } : n))
-    );
-  };
-
-  const handleDeleteNote = (id: string) => {
-    setNotes((prev) => prev.filter((n) => n.id !== id));
-  };
+  const handleToggleNote = (id: string) => onToggleNote(id);
+  const handleDeleteNote = (id: string) => onDeleteNote(id);
 
   return (
     <div className="p-6 space-y-6 bg-slate-50 min-h-[calc(100vh-4rem)]">

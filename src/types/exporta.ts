@@ -169,3 +169,26 @@ export interface OnboardingStep {
   actionRoute: string;
   completed: boolean;
 }
+
+export type NoteCategory = 'Gümrük Mevzuatı' | 'Müşteri Talebi' | 'Lojistik' | 'Ödeme & Banka';
+
+export interface NoteItem {
+  id: string;
+  title: string;
+  category: NoteCategory;
+  content: string;
+  createdAt: string;
+  completed: boolean;
+}
+
+/**
+ * Organization-level preferences that are not part of CompanySettings but still
+ * have to survive a page reload (stored in the `org_preferences` table).
+ */
+export interface OrgPreferences {
+  docNumberFormats: Record<DocType, DocNumberFormat>;
+  customFields: CustomField[];
+  numberHistory: DocNumberHistory[];
+  notes: NoteItem[];
+  onboardingSteps: OnboardingStep[];
+}

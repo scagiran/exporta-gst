@@ -30,40 +30,65 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const loadUserOrg = async (userId: string, userEmail?: string) => {
     try {
       // 1. Check if user is a member of an existing organization
-      const { data: memberData } = await supabase
+      // Deliberately NOT maybeSingle(): a user with more than one membership row
+      // would make it return null, which used to be misread as "no organization"
+      // and silently spawned yet another empty org on every page load.
+      const { data: memberRows, error: memberErr } = await supabase
         .from('org_members')
-        .select('org_id, organizations(id, name)')
-        .eq('user_id', userId)
-        .maybeSingle();
+        .select('org_id')
+        .eq('user_id', userId);
 
-      if (memberData && memberData.organizations) {
-        const orgInfo = memberData.organizations as unknown as { id: string; name: string };
-        setOrganization({ id: orgInfo.id, name: orgInfo.name });
+      if (memberErr) {
+        // A failed lookup is not proof that the user has no organization —
+        // creating one here would orphan the existing data.
+        console.error('[ExPorta] org_members okunamadı:', memberErr.message, memberErr);
         return;
       }
 
-      // 2. Fallback: If no organization exists for this user, auto-create one
+      if (memberRows && memberRows.length > 0) {
+        if (memberRows.length > 1) {
+          console.warn(
+            `[ExPorta] Bu kullanıcı ${memberRows.length} organizasyona üye. İlki kullanılıyor:`,
+            memberRows[0].org_id
+          );
+        }
+
+        const orgId = memberRows[0].org_id;
+        const { data: orgRow, error: orgErr } = await supabase
+          .from('organizations')
+          .select('id, name')
+          .eq('id', orgId)
+          .maybeSingle();
+
+        if (orgErr) {
+          console.error('[ExPorta] organizations okunamadı:', orgErr.message, orgErr);
+        }
+
+        // Even if the name cannot be read, the membership proves the org exists —
+        // keep working with the id rather than creating a replacement.
+        setOrganization({ id: orgId, name: orgRow?.name || 'Organizasyonum' });
+        return;
+      }
+
+      // 2. Genuinely no membership row: this is a first-time user, create their org.
+      // Done through an RPC so the organization row and the owner membership are
+      // written atomically. Doing it from the client used to leave orphan orgs:
+      // the insert committed, but reading the row back was blocked by the SELECT
+      // policy (which requires a membership that did not exist yet), so the
+      // membership insert never ran.
       const defaultOrgName = userEmail ? `${userEmail.split('@')[0].toUpperCase()} İhracat` : 'İhracat Firmam';
-      
-      const { data: newOrg, error: createOrgErr } = await supabase
-        .from('organizations')
-        .insert({ name: defaultOrgName })
-        .select()
-        .single();
 
-      if (createOrgErr || !newOrg) {
-        console.error('Error auto-creating organization:', createOrgErr);
+      const { data: newOrgId, error: createOrgErr } = await supabase.rpc(
+        'create_org_for_current_user',
+        { org_name: defaultOrgName }
+      );
+
+      if (createOrgErr || !newOrgId) {
+        console.error('[ExPorta] Organizasyon oluşturulamadı:', createOrgErr?.message, createOrgErr);
         return;
       }
 
-      // Add user as owner of the newly created organization
-      await supabase.from('org_members').insert({
-        org_id: newOrg.id,
-        user_id: userId,
-        role: 'owner',
-      });
-
-      setOrganization({ id: newOrg.id, name: newOrg.name });
+      setOrganization({ id: newOrgId as string, name: defaultOrgName });
     } catch (err) {
       console.error('Failed to load or create organization:', err);
     }
@@ -126,25 +151,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { error: error || new Error('Kullanıcı kaydı başarısız oldu') };
     }
 
-    const userId = data.user.id;
-
-    // Create the organization
-    const { data: newOrg, error: orgError } = await supabase
-      .from('organizations')
-      .insert({ name: companyName || 'İhracat Şirketim' })
-      .select()
-      .single();
-
-    if (!orgError && newOrg) {
-      // Add member record
-      await supabase.from('org_members').insert({
-        org_id: newOrg.id,
-        user_id: userId,
-        role: 'owner',
-      });
-      setOrganization({ id: newOrg.id, name: newOrg.name });
+    // Without an active session the RPC below cannot run (auth.uid() is null).
+    // That happens when e-mail confirmation is switched on for the project.
+    if (!data.session) {
+      setLoading(false);
+      return {
+        error: new Error(
+          'Hesabınız oluşturuldu, ancak e-posta doğrulaması bekleniyor. Doğruladıktan sonra giriş yapın.'
+        ),
+      };
     }
 
+    const orgName = companyName || 'İhracat Şirketim';
+    const { data: newOrgId, error: orgError } = await supabase.rpc(
+      'create_org_for_current_user',
+      { org_name: orgName }
+    );
+
+    if (orgError || !newOrgId) {
+      console.error('[ExPorta] Kayıt sırasında organizasyon oluşturulamadı:', orgError?.message, orgError);
+      setLoading(false);
+      return {
+        error: new Error(
+          `Hesabınız oluşturuldu ancak şirket kaydınız açılamadı: ${orgError?.message || 'bilinmeyen hata'}`
+        ),
+      };
+    }
+
+    setOrganization({ id: newOrgId as string, name: orgName });
     setLoading(false);
     return { error: null };
   };

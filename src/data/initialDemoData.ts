@@ -1,4 +1,4 @@
-import { Customer, Product, MasterShipment, CompanySettings, CustomField, OnboardingStep } from '../types/exporta';
+import { Customer, Product, MasterShipment, CompanySettings, CustomField, OnboardingStep, NoteItem } from '../types/exporta';
 import { DEFAULT_NUMBER_FORMATS } from '../lib/numbering';
 
 export const INITIAL_COMPANY_SETTINGS: CompanySettings = {
@@ -596,6 +596,33 @@ export const INITIAL_ONBOARDING_STEPS: OnboardingStep[] = [
     title: 'Belgeleri Oluştur',
     description: 'Commercial Invoice, Packing List ve Shipping Instruction belgelerinizi 3 şablonla bastırın.',
     actionRoute: 'documents',
+    completed: false,
+  },
+];
+
+export const INITIAL_NOTES: NoteItem[] = [
+  {
+    id: 'n-1',
+    title: 'Almanya AB A.TR Dolaşım Belgesi Gereksinimi',
+    category: 'Gümrük Mevzuatı',
+    content: 'Hamburg teslimatlarında gümrük vergisi muafiyeti için gümrük müşavirimize elektronik A.TR vizesi iletilmelidir.',
+    createdAt: '2026-08-08',
+    completed: true,
+  },
+  {
+    id: 'n-2',
+    title: 'ABD Akreditif (L/C) 45 Gün Vadeli Belge İbrazı',
+    category: 'Ödeme & Banka',
+    content: 'Chicago Global Trade sevkiyatı için konşimento tarihi itibaren 21 gün içinde İş Bankası Ostim şubesine 3 nüsha Commercial Invoice sunulacak.',
+    createdAt: '2026-08-09',
+    completed: false,
+  },
+  {
+    id: 'n-3',
+    title: 'Dubai Jebel Ali Serbest Bölge Konşimento Talimatı',
+    category: 'Lojistik',
+    content: 'Consignee kısmına Levant Import FZE yazılmalı, Notify Party kısmına acente adı eklenmelidir.',
+    createdAt: '2026-08-10',
     completed: false,
   },
 ];

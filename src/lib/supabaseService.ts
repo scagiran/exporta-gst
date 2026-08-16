@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { Customer, Product, MasterShipment, CompanySettings } from '../types/exporta';
+import { Customer, Product, MasterShipment, CompanySettings, OrgPreferences } from '../types/exporta';
 
 /**
  * Fetches all organization-scoped data from Supabase Postgres for a given tenant org_id.
@@ -134,4 +134,40 @@ export async function saveCompanySettings(orgId: string, settings: CompanySettin
     { onConflict: 'org_id' }
   );
   if (error) console.error('Error saving company settings to Supabase:', error);
+}
+
+/**
+ * Fetches organization preferences (numbering formats, custom fields, notes,
+ * onboarding progress). Returns null when the org has no saved preferences yet.
+ */
+export async function fetchOrgPreferences(orgId: string): Promise<Partial<OrgPreferences> | null> {
+  const { data, error } = await supabase
+    .from('org_preferences')
+    .select('data')
+    .eq('org_id', orgId)
+    .maybeSingle();
+
+  if (error) {
+    console.error('Error fetching org preferences from Supabase:', error);
+    return null;
+  }
+  return (data?.data as Partial<OrgPreferences>) || null;
+}
+
+/**
+ * Upserts the full organization preferences blob.
+ */
+export async function saveOrgPreferences(orgId: string, prefs: OrgPreferences) {
+  const { error } = await supabase.from('org_preferences').upsert(
+    {
+      org_id: orgId,
+      data: prefs,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'org_id' }
+  );
+  if (error) {
+    console.error('[ExPorta] org_preferences kaydedilemedi:', error.message, error);
+  }
+  return { error };
 }

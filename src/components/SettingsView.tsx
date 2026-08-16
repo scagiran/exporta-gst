@@ -10,7 +10,7 @@ interface SettingsViewProps {
   onAddCustomField: (field: CustomField) => void;
   onDeleteCustomField: (id: string) => void;
   docNumberFormats: Record<DocType, DocNumberFormat>;
-  onUpdateNumberFormat: (docType: DocType, format: DocNumberFormat) => void;
+  onUpdateNumberFormat: (docType: DocType, format: DocNumberFormat, reason: string) => void;
   numberHistory: DocNumberHistory[];
 }
 
@@ -43,6 +43,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [numPrefix, setNumPrefix] = useState(docNumberFormats.proforma.prefix);
   const [numFormatStr, setNumFormatStr] = useState(docNumberFormats.proforma.format);
   const [numNextSeq, setNumNextSeq] = useState(docNumberFormats.proforma.nextSeq);
+  const [numChangeReason, setNumChangeReason] = useState('');
 
   const docTypesList: DocType[] = [
     'quotation',
@@ -88,9 +89,25 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setNumPrefix(cfg.prefix);
     setNumFormatStr(cfg.format);
     setNumNextSeq(cfg.nextSeq);
+    setNumChangeReason('');
   };
 
   const handleSaveNumberFormat = () => {
+    const current = docNumberFormats[selectedNumDocType];
+    if (current.prefix === numPrefix && current.format === numFormatStr) {
+      alert('Formatta bir değişiklik yok.');
+      return;
+    }
+
+    // The prefix only lands anywhere if the pattern actually contains the token.
+    if (current.prefix !== numPrefix && !numFormatStr.includes('{PREFIX}')) {
+      alert(
+        'Önek değişikliği bu formatta etkisiz kalır: numara kalıbında {PREFIX} token\'ı yok.\n\n' +
+        `Kalıbı örneğin "{PREFIX}-{YYYY}-{CUSTOMER}-{SEQ}" şeklinde yazın.`
+      );
+      return;
+    }
+
     const updated: DocNumberFormat = {
       docType: selectedNumDocType,
       prefix: numPrefix,
@@ -98,8 +115,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       nextSeq: numNextSeq,
       seqLength: 3,
     };
-    onUpdateNumberFormat(selectedNumDocType, updated);
-    alert(`${DOC_TYPE_NAMES[selectedNumDocType]} numaralandırma formatı güncellendi.`);
+    onUpdateNumberFormat(selectedNumDocType, updated, numChangeReason.trim() || 'Gerekçe belirtilmedi');
+    setNumChangeReason('');
+    alert(`${DOC_TYPE_NAMES[selectedNumDocType]} numaralandırma formatı güncellendi. Bundan sonra oluşturulan sevkiyatlarda bu format kullanılacak.`);
   };
 
   // Sample Customer for live preview
@@ -551,10 +569,20 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 </p>
               </div>
 
-              <div className="flex justify-end">
+              <div className="flex items-end justify-between gap-4">
+                <div className="flex-1">
+                  <label className="block font-semibold text-slate-700 mb-1">Değişiklik Gerekçesi (Audit Log'a yazılır)</label>
+                  <input
+                    type="text"
+                    value={numChangeReason}
+                    onChange={(e) => setNumChangeReason(e.target.value)}
+                    placeholder="Örn: Müşteri talebi üzerine yıl-ay formatına geçildi"
+                    className="w-full border border-slate-300 rounded-lg p-2"
+                  />
+                </div>
                 <button
                   onClick={handleSaveNumberFormat}
-                  className="py-2.5 px-5 bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs rounded-lg shadow-xs flex items-center space-x-1"
+                  className="py-2.5 px-5 bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs rounded-lg shadow-xs flex items-center space-x-1 shrink-0"
                 >
                   <Check className="w-4 h-4 mr-1" />
                   <span>Formatı Kaydet</span>
@@ -570,7 +598,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               </h4>
               <div className="space-y-2">
                 {numberHistory.length === 0 ? (
-                  <p className="text-xs text-slate-500 italic p-3 bg-slate-50 rounded">Henüz onaylanmış bir belgede numara değişikliği yapılmadı.</p>
+                  <p className="text-xs text-slate-500 italic p-3 bg-slate-50 rounded">Henüz bir numaralandırma formatı değiştirilmedi.</p>
                 ) : (
                   numberHistory.map((h) => (
                     <div key={h.id} className="p-3 bg-slate-50 rounded border border-slate-200 flex justify-between items-center text-xs">
