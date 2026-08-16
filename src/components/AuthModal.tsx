@@ -49,9 +49,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
           return;
         }
 
-        const { error } = await signUp(email, password, companyName);
+        const { error, needsEmailConfirmation } = await signUp(email, password, companyName);
         if (error) {
           setErrorMsg(error.message);
+        } else if (needsEmailConfirmation) {
+          // Account created but not usable yet — keep the modal open so the
+          // instruction stays on screen instead of flashing past.
+          setSuccessMsg(
+            `Hesabınız oluşturuldu. ${email} adresine bir doğrulama bağlantısı gönderdik; ` +
+            'bağlantıya tıkladıktan sonra buradan giriş yapabilirsiniz.'
+          );
+          setMode('signin');
         } else {
           setSuccessMsg('Şirket hesabınız ve izole veritabanınız başarıyla oluşturuldu!');
           setTimeout(() => {

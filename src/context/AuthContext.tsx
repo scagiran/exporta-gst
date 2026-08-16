@@ -13,7 +13,16 @@ interface AuthContextType {
   organization: Organization | null;
   loading: boolean;
   signIn: (email: string, pass: string) => Promise<{ error: Error | null }>;
-  signUp: (email: string, pass: string, companyName: string) => Promise<{ error: Error | null }>;
+  /**
+   * `needsEmailConfirmation` is true when the project requires e-mail verification:
+   * the account exists but there is no session yet, so this is an outcome to report,
+   * not a failure.
+   */
+  signUp: (
+    email: string,
+    pass: string,
+    companyName: string
+  ) => Promise<{ error: Error | null; needsEmailConfirmation?: boolean }>;
   signOut: () => Promise<void>;
   refreshOrg: () => Promise<void>;
 }
@@ -154,12 +163,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Without an active session the RPC below cannot run (auth.uid() is null).
     // That happens when e-mail confirmation is switched on for the project.
     if (!data.session) {
+      // Organization creation needs an authenticated session, so it is deferred to
+      // the first sign-in after the address is verified (loadUserOrg handles it).
       setLoading(false);
-      return {
-        error: new Error(
-          'Hesabınız oluşturuldu, ancak e-posta doğrulaması bekleniyor. Doğruladıktan sonra giriş yapın.'
-        ),
-      };
+      return { error: null, needsEmailConfirmation: true };
     }
 
     const orgName = companyName || 'İhracat Şirketim';
