@@ -13,6 +13,7 @@ import { SettingsView } from './components/SettingsView';
 import { NotesView } from './components/NotesView';
 import { ExcelImportModal } from './components/ExcelImportModal';
 import { AuthModal } from './components/AuthModal';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 import { AuthProvider, useAuth } from './context/AuthContext';
 import {
@@ -596,8 +597,10 @@ function MainAppContent() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <MainAppContent />
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <MainAppContent />
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }

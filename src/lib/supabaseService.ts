@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { Customer, Product, MasterShipment, CompanySettings, OrgPreferences } from '../types/exporta';
+import { normalizeCustomer, normalizeProduct, normalizeShipment } from './normalize';
 
 /**
  * Fetches all organization-scoped data from Supabase Postgres for a given tenant org_id.
@@ -13,20 +14,22 @@ export async function fetchOrgData(orgId: string) {
       supabase.from('company_settings').select('*').eq('org_id', orgId).maybeSingle(),
     ]);
 
-    const customers: Customer[] = (custRes.data || []).map((row) => ({
-      id: row.client_id || row.id,
-      ...(typeof row.data === 'object' && row.data !== null ? row.data : {}),
-    }));
+    // Rows written by older versions of the app can be missing fields the UI reads,
+    // so every record is normalized here rather than guarded at each call site.
+    const payload = (row: { data?: unknown }) =>
+      typeof row.data === 'object' && row.data !== null ? row.data : {};
 
-    const products: Product[] = (prodRes.data || []).map((row) => ({
-      id: row.client_id || row.id,
-      ...(typeof row.data === 'object' && row.data !== null ? row.data : {}),
-    }));
+    const customers: Customer[] = (custRes.data || []).map((row) =>
+      normalizeCustomer({ ...payload(row) }, row.client_id || row.id)
+    );
 
-    const shipments: MasterShipment[] = (shipRes.data || []).map((row) => ({
-      id: row.code || row.id,
-      ...(typeof row.data === 'object' && row.data !== null ? row.data : {}),
-    }));
+    const products: Product[] = (prodRes.data || []).map((row) =>
+      normalizeProduct({ ...payload(row) }, row.client_id || row.id)
+    );
+
+    const shipments: MasterShipment[] = (shipRes.data || []).map((row) =>
+      normalizeShipment({ ...payload(row) }, row.code || row.id)
+    );
 
     const companySettings: CompanySettings | null = settingsRes.data?.data || null;
 
