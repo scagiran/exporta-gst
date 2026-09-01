@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   Ship,
   FileText,
@@ -22,21 +22,18 @@ interface LandingPageProps {
 }
 
 export const LandingPage: React.FC<LandingPageProps> = ({ onStartDemo }) => {
-  const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('annual');
-
   const pricingPlans = [
     {
       id: 'free',
       name: 'Başlangıç (Free)',
       desc: 'İhracata yeni başlayan küçük işletmeler için temel seviye.',
       monthlyPrice: '₺0',
-      annualPrice: '₺0',
       period: 'Sonsuza Kadar Ücretsiz',
       highlight: false,
       badge: 'Ücretsiz',
       features: [
         '1 Kullanıcı Hesabı',
-        'Aylık 5 Master Sevkiyat',
+        'Sınırsız Master Sevkiyat',
         '7 Aşamalı İhracat Belge Üretimi',
         'Standart Belge Şablonu (Classic)',
         'Müşteri & Ürün Katalog Yönetimi',
@@ -49,39 +46,38 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartDemo }) => {
       name: 'Profesyonel (Pro)',
       desc: 'Düzenli ihracat yapan KOBİ\'ler için tam donanımlı operasyon paketi.',
       monthlyPrice: '₺1.490',
-      annualPrice: '₺1.190',
-      period: 'Kullanıcı / Ay (Yıllık Ödeme)',
+      period: 'Kullanıcı / Ay',
       highlight: true,
       badge: 'En Popüler',
       features: [
         'Sınırsız Master Sevkiyat Oluşturma',
         '7 Aşamalı Otomatik Belge Workflow',
         '3 Profesyonel Şablon (Classic, Modern, Compact)',
-        'Excel İçe/Dışa Aktarım (Müşteri & Ürün)',
+        'Excel İçe Aktarım (Müşteri & Ürün)',
         'Özel Alan Tanımlama (Custom Fields)',
         'Otomatik Belge Numaralandırma',
         'Supabase Bulut Senkronizasyonu & Yedekleme',
         'E-posta ile Müşteri Desteği',
       ],
-      ctaText: '14 Gün Ücretsiz Deneyin',
+      ctaText: 'Ücretsiz Başlayın',
     },
     {
       id: 'business',
       name: 'Kurumsal (Business)',
       desc: 'Çoklu kullanıcı ve geniş ihracat ekibine sahip firmalar için.',
       monthlyPrice: '₺3.990',
-      annualPrice: '₺3.190',
       period: '5 Kullanıcı Dahil / Ay',
       highlight: false,
       badge: 'Çoklu Kullanıcı',
       features: [
-        '5 Kullanıcıya Kadar Multi-Tenant Erişim',
-        'Gelişmiş Şirket Rol ve Yetkilendirme',
-        'Firmaya Özel Belge & Logo Şablonu',
-        'Sınırsız Veri Saklama ve Versiyonlama',
-        'Özel Gümrük & Acente Şablon Tasarımı',
-        'Öncelikli 7/24 VIP Destek',
-        'Özel Veri Dışa Aktarım API Erişimi',
+        'Sınırsız Master Sevkiyat & Belge Üretimi',
+        '3 Profesyonel Şablon + Özel Alan Tanımlama',
+        'Otomatik Belge Numaralandırma & Değişiklik Kaydı',
+        { label: '5 Kullanıcıya Kadar Multi-Tenant Erişim', soon: true },
+        { label: 'Gelişmiş Şirket Rol ve Yetkilendirme', soon: true },
+        { label: 'Firmaya Özel Belge & Logo Şablonu', soon: true },
+        { label: 'Özel Veri Dışa Aktarım API Erişimi', soon: true },
+        'Kurulum & Şablon Tasarım Desteği (manuel)',
       ],
       ctaText: 'Kurumsal Görüşme Yapın',
     },
@@ -90,7 +86,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartDemo }) => {
   const faqs = [
     {
       q: 'ExPorta verilerimi nerede saklıyor?',
-      a: 'Verileriniz şirket bazlı Row Level Security (RLS) ile izole edilmiş PostgreSQL veritabanımızda yüksek güvenlik standartları ile saklanır. Farklı şirketler verilerinize erişemez.',
+      a: 'Verileriniz Supabase (PostgreSQL) altyapısında, her organizasyona ayrı bir kayıt alanı verilerek saklanır. Erişim, oturum açan kullanıcının üyesi olduğu organizasyonla sınırlandırılır.',
     },
     {
       q: 'Mevcut Excel müşteri ve ürün listemi aktarabilir miyim?',
@@ -101,8 +97,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartDemo }) => {
       a: 'Kesinlikle. Commercial Invoice, Packing List, Proforma ve diğer tüm 7 ihracat belgesini anında canlı önizleyebilir, PDF olarak indirebilir veya yazdırabilirsiniz.',
     },
     {
-      q: 'Ücretsiz deneme süresinde kredi kartı gerekiyor mu?',
-      a: 'Hayır! Kredi kartı bilgisi vermeden 14 gün boyunca Profesyonel paketin tüm özelliklerini deneyebilirsiniz.',
+      q: 'Ücretli pakete nasıl geçerim?',
+      a: 'Ücretsiz hesabınızı hemen açıp uygulamayı kullanmaya başlayabilirsiniz. Pro veya Kurumsal pakete geçmek için bizimle iletişime geçin; ödeme ve aktivasyon manuel olarak, birlikte yapılır.',
     },
   ];
 
@@ -252,39 +248,21 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartDemo }) => {
           <span className="text-xs font-mono text-teal-400 font-bold uppercase tracking-widest">ŞEFFAF VE UYGUN FİYATLANDIRMA</span>
           <h2 className="text-3xl md:text-5xl font-black text-white">Şirketiniz İçin En Uygun Planı Seçin</h2>
           <p className="text-slate-400 text-sm max-w-xl mx-auto">
-            Gizli ücret veya kurulum maliyeti yok. İster ücretsiz baslayın, ister kurumsal pakete geçin.
+            Ücretsiz paketle hemen başlayın. Pro ve Kurumsal paketlerde ödeme ve aktivasyon
+            şu an için bizimle iletişime geçilerek, manuel olarak yapılır.
           </p>
 
-          {/* Billing Switcher */}
-          <div className="pt-4 flex items-center justify-center space-x-4">
-            <span className={`text-xs font-semibold ${billingCycle === 'monthly' ? 'text-white' : 'text-slate-500'}`}>
-              Aylık Ödeme
+          <div className="pt-2 flex items-center justify-center">
+            <span className="text-[11px] font-mono text-slate-500 bg-slate-900 border border-slate-800 rounded-full px-3 py-1">
+              Fiyatlar aylık, kullanıcı başınadır · KDV hariç
             </span>
-            <button
-              onClick={() => setBillingCycle(billingCycle === 'monthly' ? 'annual' : 'monthly')}
-              className="w-14 h-7 bg-slate-800 rounded-full p-1 border border-slate-700 transition-colors relative"
-            >
-              <div
-                className={`w-5 h-5 rounded-full bg-teal-400 transition-transform ${
-                  billingCycle === 'annual' ? 'translate-x-7' : 'translate-x-0'
-                }`}
-              />
-            </button>
-            <div className="flex items-center space-x-1.5">
-              <span className={`text-xs font-semibold ${billingCycle === 'annual' ? 'text-white' : 'text-slate-500'}`}>
-                Yıllık Ödeme
-              </span>
-              <span className="bg-teal-500/20 text-teal-400 text-[10px] font-bold px-2 py-0.5 rounded-full border border-teal-500/30">
-                %20 İndirimli
-              </span>
-            </div>
           </div>
         </div>
 
         {/* Pricing Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-stretch">
           {pricingPlans.map((plan) => {
-            const price = billingCycle === 'annual' ? plan.annualPrice : plan.monthlyPrice;
+            const price = plan.monthlyPrice;
             return (
               <div
                 key={plan.id}
@@ -315,12 +293,23 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartDemo }) => {
                   </div>
 
                   <ul className="space-y-3 text-xs text-slate-300">
-                    {plan.features.map((feat, idx) => (
-                      <li key={idx} className="flex items-center space-x-2.5">
-                        <Check className="w-4 h-4 text-teal-400 shrink-0" />
-                        <span>{feat}</span>
-                      </li>
-                    ))}
+                    {plan.features.map((feat, idx) => {
+                      const isSoon = typeof feat === 'object' && feat.soon;
+                      const label = typeof feat === 'object' ? feat.label : feat;
+                      return (
+                        <li key={idx} className="flex items-center space-x-2.5">
+                          <Check
+                            className={`w-4 h-4 shrink-0 ${isSoon ? 'text-slate-600' : 'text-teal-400'}`}
+                          />
+                          <span className={isSoon ? 'text-slate-500' : ''}>{label}</span>
+                          {isSoon && (
+                            <span className="text-[9px] font-bold uppercase tracking-wider bg-slate-800 text-slate-400 border border-slate-700 px-1.5 py-0.5 rounded-full shrink-0">
+                              Yakında
+                            </span>
+                          )}
+                        </li>
+                      );
+                    })}
                   </ul>
                 </div>
 
