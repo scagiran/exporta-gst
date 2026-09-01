@@ -123,40 +123,47 @@ export const DocumentRenderer: React.FC<DocumentRendererProps> = ({
           </div>
         </div>
 
-        {/* Table of Items */}
+        {/* Table of Items.
+            border-separate (not border-collapse) + wrapper/row borders:
+            html2canvas 1.4.x mis-lays-out border-collapse tables, shifting
+            cell content so headers overlap the first row in PDF/print
+            capture (fine on screen). This scheme renders identically in
+            both. Vertical rules via border-r on all but the last cell. */}
         <div className="my-6 font-sans">
-          <table className="w-full text-left border-collapse border border-slate-400 text-[10px]">
-            <thead className="bg-slate-200 text-slate-900 font-bold uppercase border-b border-slate-400">
+          <table className="w-full text-left border-separate border-spacing-0 border border-slate-400 text-[10px]">
+            <thead className="bg-slate-200 text-slate-900 font-bold uppercase">
               {isPackingList ? (
                 <tr>
-                  <th className="p-2 border border-slate-400">#</th>
-                  {showImages && <th className="p-2 border border-slate-400 text-center">Görsel</th>}
-                  <th className="p-2 border border-slate-400">Ürün Kodu</th>
-                  <th className="p-2 border border-slate-400">Açıklama / Product Description</th>
-                  <th className="p-2 border border-slate-400">HS Code</th>
-                  <th className="p-2 border border-slate-400 text-center">Miktar</th>
-                  <th className="p-2 border border-slate-400 text-right">Net Ağırlık</th>
-                  <th className="p-2 border border-slate-400 text-right">Brüt Ağırlık (VGM)</th>
+                  <th className="p-2 border-b border-r border-slate-400">#</th>
+                  {showImages && <th className="p-2 border-b border-r border-slate-400 text-center">Görsel</th>}
+                  <th className="p-2 border-b border-r border-slate-400">Ürün Kodu</th>
+                  <th className="p-2 border-b border-r border-slate-400">Açıklama / Product Description</th>
+                  <th className="p-2 border-b border-r border-slate-400">HS Code</th>
+                  <th className="p-2 border-b border-r border-slate-400 text-center">Miktar</th>
+                  <th className="p-2 border-b border-r border-slate-400 text-right">Net Ağırlık</th>
+                  <th className="p-2 border-b border-slate-400 text-right">Brüt Ağırlık (VGM)</th>
                 </tr>
               ) : (
                 <tr>
-                  <th className="p-2 border border-slate-400">#</th>
-                  {showImages && <th className="p-2 border border-slate-400 text-center">Görsel</th>}
-                  <th className="p-2 border border-slate-400">Ürün Kodu</th>
-                  <th className="p-2 border border-slate-400">Açıklama / Product Description</th>
-                  <th className="p-2 border border-slate-400">HS Code</th>
-                  <th className="p-2 border border-slate-400 text-center">Miktar</th>
-                  <th className="p-2 border border-slate-400 text-right">Birim Fiyat</th>
-                  <th className="p-2 border border-slate-400 text-right">Toplam Tutarlar</th>
+                  <th className="p-2 border-b border-r border-slate-400">#</th>
+                  {showImages && <th className="p-2 border-b border-r border-slate-400 text-center">Görsel</th>}
+                  <th className="p-2 border-b border-r border-slate-400">Ürün Kodu</th>
+                  <th className="p-2 border-b border-r border-slate-400">Açıklama / Product Description</th>
+                  <th className="p-2 border-b border-r border-slate-400">HS Code</th>
+                  <th className="p-2 border-b border-r border-slate-400 text-center">Miktar</th>
+                  <th className="p-2 border-b border-r border-slate-400 text-right">Birim Fiyat</th>
+                  <th className="p-2 border-b border-slate-400 text-right">Toplam Tutarlar</th>
                 </tr>
               )}
             </thead>
             <tbody>
-              {items.map((item, idx) => (
-                <tr key={item.id} className="border-b border-slate-300">
-                  <td className="p-2 border border-slate-300">{idx + 1}</td>
+              {items.map((item, idx) => {
+                const rowBorder = idx < items.length - 1 ? 'border-b border-slate-300' : '';
+                return (
+                <tr key={item.id}>
+                  <td className={`p-2 border-r border-slate-300 ${rowBorder}`}>{idx + 1}</td>
                   {showImages && (
-                    <td className="p-1 border border-slate-300 text-center">
+                    <td className={`p-1 border-r border-slate-300 text-center ${rowBorder}`}>
                       {item.imageUrl ? (
                         <img src={item.imageUrl} alt={item.productName} crossOrigin="anonymous" className="w-10 h-10 object-cover rounded border border-slate-300 mx-auto" />
                       ) : (
@@ -164,33 +171,37 @@ export const DocumentRenderer: React.FC<DocumentRendererProps> = ({
                       )}
                     </td>
                   )}
-                  <td className="p-2 border border-slate-300 font-mono font-bold">{item.productCode}</td>
-                  <td className="p-2 border border-slate-300">
+                  <td className={`p-2 border-r border-slate-300 font-mono font-bold ${rowBorder}`}>{item.productCode}</td>
+                  <td className={`p-2 border-r border-slate-300 ${rowBorder}`}>
                     <strong className="block text-slate-900">{item.productName}</strong>
                     {item.customNotes && <span className="text-slate-600 text-[9px]">{item.customNotes}</span>}
                   </td>
-                  <td className="p-2 border border-slate-300 font-mono">{item.hsCode}</td>
-                  <td className="p-2 border border-slate-300 text-center font-bold">{item.activeQty} {item.unit}</td>
+                  <td className={`p-2 border-r border-slate-300 font-mono ${rowBorder}`}>{item.hsCode}</td>
+                  <td className={`p-2 border-r border-slate-300 text-center font-bold ${rowBorder}`}>{item.activeQty} {item.unit}</td>
                   {isPackingList ? (
                     <>
-                      <td className="p-2 border border-slate-300 text-right font-mono">{item.lineNetWeightKg.toFixed(1)} kg</td>
-                      <td className="p-2 border border-slate-300 text-right font-mono font-bold">{item.lineCalculatedGrossWeightKg.toFixed(1)} kg</td>
+                      <td className={`p-2 border-r border-slate-300 text-right font-mono ${rowBorder}`}>{item.lineNetWeightKg.toFixed(1)} kg</td>
+                      <td className={`p-2 text-right font-mono font-bold ${rowBorder}`}>{item.lineCalculatedGrossWeightKg.toFixed(1)} kg</td>
                     </>
                   ) : (
                     <>
-                      <td className="p-2 border border-slate-300 text-right font-mono">{item.unitPrice.toFixed(2)} {currency}</td>
-                      <td className="p-2 border border-slate-300 text-right font-mono font-bold">{item.totalPrice.toFixed(2)} {currency}</td>
+                      <td className={`p-2 border-r border-slate-300 text-right font-mono ${rowBorder}`}>{item.unitPrice.toFixed(2)} {currency}</td>
+                      <td className={`p-2 text-right font-mono font-bold ${rowBorder}`}>{item.totalPrice.toFixed(2)} {currency}</td>
                     </>
                   )}
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
 
-        {/* Product Visual Presentation Section if showImages */}
+        {/* Product Visual Presentation Section if showImages.
+            doc-capture-hide: on-screen editing aid only — stripped from the
+            PDF (html2canvas onclone) and print (@media print) output so the
+            business document stays lean. */}
         {showImages && (
-          <div className="my-6 border border-slate-300 rounded p-4 bg-slate-50 font-sans">
+          <div className="doc-capture-hide my-6 border border-slate-300 rounded p-4 bg-slate-50 font-sans">
             <h4 className="font-bold text-slate-800 text-[11px] mb-3 border-b border-slate-300 pb-1.5 uppercase tracking-wider flex items-center justify-between">
               <span>ÜRÜN GÖRSEL SUNUMU / PRODUCT VISUAL PRESENTATION</span>
               <span className="text-[9px] text-slate-500 font-normal">Quotation & Proforma Görsel Kataloğu</span>
@@ -381,9 +392,9 @@ export const DocumentRenderer: React.FC<DocumentRendererProps> = ({
           </table>
         </div>
 
-        {/* Product Visual Presentation Section in MODERN */}
+        {/* Product Visual Presentation Section in MODERN — see doc-capture-hide note above */}
         {showImages && (
-          <div className="my-6 bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
+          <div className="doc-capture-hide my-6 bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
             <div className="flex items-center justify-between border-b border-slate-200 pb-2">
               <span className="text-xs font-bold text-teal-800 uppercase tracking-wide">ÜRÜN GÖRSEL SUNUMU (PRODUCT PRESENTATION)</span>
               <span className="text-[10px] text-slate-500 font-mono">Görsel Katalog Katmanı</span>
@@ -477,35 +488,40 @@ export const DocumentRenderer: React.FC<DocumentRendererProps> = ({
         </div>
       </div>
 
-      <table className="w-full text-left border-collapse border border-slate-300 text-[9px] my-3">
-        <thead className="bg-slate-100 font-bold uppercase border-b border-slate-300">
+      {/* border-separate, not border-collapse: html2canvas mis-renders
+          collapsed-border tables in PDF/print (cell content overlaps
+          headers). See the classic template's table for the same fix. */}
+      <table className="w-full text-left border-separate border-spacing-0 border border-slate-300 text-[9px] my-3">
+        <thead className="bg-slate-100 font-bold uppercase">
           {isPackingList ? (
             <tr>
-              {showImages && <th className="p-1.5 border border-slate-300 text-center">Görsel</th>}
-              <th className="p-1.5 border border-slate-300">Code</th>
-              <th className="p-1.5 border border-slate-300">Description</th>
-              <th className="p-1.5 border border-slate-300">HS Code</th>
-              <th className="p-1.5 border border-slate-300 text-center">Qty</th>
-              <th className="p-1.5 border border-slate-300 text-right">Net Weight</th>
-              <th className="p-1.5 border border-slate-300 text-right">Gross Weight (VGM)</th>
+              {showImages && <th className="p-1.5 border-b border-r border-slate-300 text-center">Görsel</th>}
+              <th className="p-1.5 border-b border-r border-slate-300">Code</th>
+              <th className="p-1.5 border-b border-r border-slate-300">Description</th>
+              <th className="p-1.5 border-b border-r border-slate-300">HS Code</th>
+              <th className="p-1.5 border-b border-r border-slate-300 text-center">Qty</th>
+              <th className="p-1.5 border-b border-r border-slate-300 text-right">Net Weight</th>
+              <th className="p-1.5 border-b border-slate-300 text-right">Gross Weight (VGM)</th>
             </tr>
           ) : (
             <tr>
-              {showImages && <th className="p-1.5 border border-slate-300 text-center">Görsel</th>}
-              <th className="p-1.5 border border-slate-300">Code</th>
-              <th className="p-1.5 border border-slate-300">Description</th>
-              <th className="p-1.5 border border-slate-300">HS Code</th>
-              <th className="p-1.5 border border-slate-300 text-center">Qty</th>
-              <th className="p-1.5 border border-slate-300 text-right">Price</th>
-              <th className="p-1.5 border border-slate-300 text-right">Total ({currency})</th>
+              {showImages && <th className="p-1.5 border-b border-r border-slate-300 text-center">Görsel</th>}
+              <th className="p-1.5 border-b border-r border-slate-300">Code</th>
+              <th className="p-1.5 border-b border-r border-slate-300">Description</th>
+              <th className="p-1.5 border-b border-r border-slate-300">HS Code</th>
+              <th className="p-1.5 border-b border-r border-slate-300 text-center">Qty</th>
+              <th className="p-1.5 border-b border-r border-slate-300 text-right">Price</th>
+              <th className="p-1.5 border-b border-slate-300 text-right">Total ({currency})</th>
             </tr>
           )}
         </thead>
         <tbody>
-          {items.map((item) => (
-            <tr key={item.id} className="border-b border-slate-200">
+          {items.map((item, idx) => {
+            const rowBorder = idx < items.length - 1 ? 'border-b border-slate-200' : '';
+            return (
+            <tr key={item.id}>
               {showImages && (
-                <td className="p-1 border border-slate-200 text-center">
+                <td className={`p-1 border-r border-slate-200 text-center ${rowBorder}`}>
                   {item.imageUrl ? (
                     <img src={item.imageUrl} alt={item.productName} crossOrigin="anonymous" className="w-8 h-8 object-cover rounded border border-slate-200 mx-auto" />
                   ) : (
@@ -513,29 +529,30 @@ export const DocumentRenderer: React.FC<DocumentRendererProps> = ({
                   )}
                 </td>
               )}
-              <td className="p-1.5 border border-slate-200 font-mono font-bold">{item.productCode}</td>
-              <td className="p-1.5 border border-slate-200">{item.productName}</td>
-              <td className="p-1.5 border border-slate-200 font-mono">{item.hsCode}</td>
-              <td className="p-1.5 border border-slate-200 text-center font-bold">{item.activeQty} {item.unit}</td>
+              <td className={`p-1.5 border-r border-slate-200 font-mono font-bold ${rowBorder}`}>{item.productCode}</td>
+              <td className={`p-1.5 border-r border-slate-200 ${rowBorder}`}>{item.productName}</td>
+              <td className={`p-1.5 border-r border-slate-200 font-mono ${rowBorder}`}>{item.hsCode}</td>
+              <td className={`p-1.5 border-r border-slate-200 text-center font-bold ${rowBorder}`}>{item.activeQty} {item.unit}</td>
               {isPackingList ? (
                 <>
-                  <td className="p-1.5 border border-slate-200 text-right font-mono">{item.lineNetWeightKg.toFixed(1)} kg</td>
-                  <td className="p-1.5 border border-slate-200 text-right font-mono font-bold">{item.lineCalculatedGrossWeightKg.toFixed(1)} kg</td>
+                  <td className={`p-1.5 border-r border-slate-200 text-right font-mono ${rowBorder}`}>{item.lineNetWeightKg.toFixed(1)} kg</td>
+                  <td className={`p-1.5 text-right font-mono font-bold ${rowBorder}`}>{item.lineCalculatedGrossWeightKg.toFixed(1)} kg</td>
                 </>
               ) : (
                 <>
-                  <td className="p-1.5 border border-slate-200 text-right font-mono">{item.unitPrice.toFixed(2)}</td>
-                  <td className="p-1.5 border border-slate-200 text-right font-mono font-bold">{item.totalPrice.toFixed(2)}</td>
+                  <td className={`p-1.5 border-r border-slate-200 text-right font-mono ${rowBorder}`}>{item.unitPrice.toFixed(2)}</td>
+                  <td className={`p-1.5 text-right font-mono font-bold ${rowBorder}`}>{item.totalPrice.toFixed(2)}</td>
                 </>
               )}
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
 
-      {/* Product Visual Presentation Section in COMPACT */}
+      {/* Product Visual Presentation Section in COMPACT — see doc-capture-hide note above */}
       {showImages && (
-        <div className="my-3 bg-slate-50 p-3 rounded border border-slate-300 space-y-2">
+        <div className="doc-capture-hide my-3 bg-slate-50 p-3 rounded border border-slate-300 space-y-2">
           <div className="flex items-center justify-between border-b border-slate-200 pb-1">
             <span className="text-[10px] font-bold text-slate-800 uppercase tracking-wide">ÜRÜN GÖRSEL SUNUMU (PRODUCT PRESENTATION)</span>
             <span className="text-[8px] text-slate-500 font-mono">Görsel Katalog Katmanı</span>

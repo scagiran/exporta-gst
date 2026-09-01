@@ -132,6 +132,9 @@ export async function downloadPdfFromElement(
       scrollX: 0,
       scrollY: 0,
       onclone: (clonedDoc: Document) => {
+        // Drop on-screen-only aids (product image gallery) from the capture.
+        clonedDoc.querySelectorAll('.doc-capture-hide').forEach((el) => el.remove());
+
         // Clean up any oklch color references in style tags
         const styleElements = clonedDoc.querySelectorAll('style');
         styleElements.forEach((s) => {
@@ -199,6 +202,13 @@ export function printElement(element: HTMLElement): boolean {
     return false;
   }
 
+  // Clone so we can drop on-screen-only aids (the product image gallery)
+  // without touching the live preview — mirrors the PDF path's onclone strip.
+  const captureRoot = element.cloneNode(true) as HTMLElement;
+  captureRoot
+    .querySelectorAll('.doc-capture-hide')
+    .forEach((el) => el.remove());
+
   const head = Array.from(
     document.querySelectorAll('style, link[rel="stylesheet"]')
   )
@@ -240,7 +250,7 @@ export function printElement(element: HTMLElement): boolean {
       @page { size: A4; margin: 10mm; }
     </style>
   </head>
-  <body>${element.outerHTML}</body>
+  <body>${captureRoot.outerHTML}</body>
 </html>`);
   printWindow.document.close();
 
