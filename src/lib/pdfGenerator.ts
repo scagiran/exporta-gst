@@ -78,6 +78,30 @@ function removeOrphanedHtml2pdfNodes(): void {
     .forEach((n) => n.remove());
 }
 
+/**
+ * Wait until the given document's web fonts are actually loaded and swapped in.
+ *
+ * The app's Google Fonts <link> uses `display=swap`, so text is first laid out
+ * with a fallback face whose glyph advance widths differ from Plus Jakarta Sans.
+ * If we capture/print before the real font is ready, every line is measured with
+ * the wrong metrics — headers wrap where they wouldn't on screen and the extra
+ * line-heights push the document onto a second page. `fonts.ready` resolves once
+ * all pending font loads for that document settle; the timeout is a safety net
+ * so a stalled font never blocks the export forever.
+ */
+async function waitForFonts(doc: Document, timeoutMs = 3000): Promise<void> {
+  const fontSet: FontFaceSet | undefined = doc.fonts;
+  if (!fontSet) return;
+  try {
+    await Promise.race([
+      fontSet.ready,
+      new Promise((resolve) => setTimeout(resolve, timeoutMs)),
+    ]);
+  } catch {
+    /* fonts.ready rejects only on a font error — capture with what we have */
+  }
+}
+
 export async function downloadPdfFromElement(
   element: HTMLElement,
   filename: string
@@ -131,10 +155,17 @@ export async function downloadPdfFromElement(
       format: 'a4',
       orientation: 'portrait' as const,
     },
+    // avoid-all: never split an element across a page boundary. These are
+    // single-page business documents by design (DocumentRenderer roots are
+    // min-h-[1050px] ≈ one A4). With fonts loaded the content fits; avoid-all
+    // keeps a stray couple of pixels of slop from spilling a mostly-blank
+    // page 2 instead of forcibly scaling the text down.
     pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
   };
 
   try {
+    // Measure with the real font, not the swap fallback (see waitForFonts).
+    await waitForFonts(document);
     await html2pdf().set(options).from(element).save();
   } catch (err) {
     console.error('[ExPorta] PDF oluşturulamadı:', err);
@@ -154,6 +185,11 @@ export async function downloadPdfFromElement(
  *    so the printout was an unstyled dump. Hrefs are now absolutised.
  *  - `<style>` blocks still contained `oklch()` colours, which some print
  *    engines drop. They are run through the same cleanup as the PDF path.
+ *  - It printed on the popup's `load` event, which fires when the copied
+ *    stylesheet <link>s are *fetched* — not when the @font-face files they
+ *    reference have downloaded and swapped in. Printing then measured text
+ *    with the fallback font: headers wrapped and the document spilled onto a
+ *    second page. Now it waits for the popup document's `fonts.ready`.
  * Returns false when the popup was blocked so the caller can tell the user.
  */
 export function printElement(element: HTMLElement): boolean {
@@ -184,7 +220,15 @@ export function printElement(element: HTMLElement): boolean {
     <title>Yazdır — ExPorta Belge</title>
     ${head}
     <style>
-      html, body { background: #fff !important; margin: 0; padding: 20px; }
+      html, body {
+        background: #fff !important;
+        margin: 0;
+        padding: 20px;
+        /* Ensure the popup actually requests the same web fonts, so
+           fonts.ready has something to wait for and print metrics match
+           the on-screen preview. */
+        font-family: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, sans-serif;
+      }
       @page { size: A4; margin: 10mm; }
     </style>
   </head>
@@ -192,17 +236,32 @@ export function printElement(element: HTMLElement): boolean {
 </html>`);
   printWindow.document.close();
 
-  // Wait for the copied stylesheets/fonts to load before firing the dialog,
-  // instead of a fixed 400ms guess that fired too early on slow loads.
   const trigger = () => {
     printWindow.focus();
     printWindow.print();
     printWindow.close();
   };
+
+  // Print only after the popup's own web fonts have loaded and swapped in.
+  // The `load` event alone fires when the <link> stylesheets are fetched, not
+  // when their @font-face files are ready — printing then would use fallback
+  // metrics and re-introduce the wrapping / 2-page overflow.
+  const afterFontsReady = () => {
+    const winFonts: FontFaceSet | undefined = printWindow.document.fonts;
+    if (winFonts) {
+      Promise.race([
+        winFonts.ready,
+        new Promise((resolve) => setTimeout(resolve, 3000)),
+      ]).then(trigger, trigger);
+    } else {
+      setTimeout(trigger, 400);
+    }
+  };
+
   if (printWindow.document.readyState === 'complete') {
-    setTimeout(trigger, 250);
+    afterFontsReady();
   } else {
-    printWindow.addEventListener('load', () => setTimeout(trigger, 250));
+    printWindow.addEventListener('load', afterFontsReady);
   }
 
   return true;
