@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { MasterShipment, Customer, Product, DocType, CustomField, DocumentInfo, DocNumberFormat } from '../types/exporta';
 import { generateDocNumber } from '../lib/numbering';
 import { Ship, Plus, Search, FileCheck, AlertTriangle, ChevronRight, Calendar, ArrowRight, Building, Check } from 'lucide-react';
+import { ModalCloseButton } from './ModalCloseButton';
+import { useEscapeClose } from '../lib/useEscapeClose';
 
 interface ShipmentsViewProps {
   shipments: MasterShipment[];
@@ -27,6 +29,26 @@ export const ShipmentsView: React.FC<ShipmentsViewProps> = ({
 }) => {
   const [search, setSearch] = useState('');
   const [isWizardOpen, setIsWizardOpen] = useState(false);
+  // Dirty flag: any control change inside the wizard body bubbles to its onChange.
+  const [wizardDirty, setWizardDirty] = useState(false);
+
+  const openWizard = () => {
+    setWizardDirty(false);
+    setIsWizardOpen(true);
+  };
+
+  const closeWizard = () => {
+    if (
+      wizardDirty &&
+      !window.confirm('Kaydedilmemiş değişiklikler var, çıkmak istediğinize emin misiniz?')
+    ) {
+      return;
+    }
+    setIsWizardOpen(false);
+    setWizardDirty(false);
+  };
+
+  useEscapeClose(isWizardOpen, closeWizard);
 
   // New Shipment Form State
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>(customers[0]?.id || '');
@@ -161,6 +183,7 @@ export const ShipmentsView: React.FC<ShipmentsViewProps> = ({
 
     onAddShipment(newShipment);
     onConsumeDocNumberSeqs();
+    setWizardDirty(false);
     setIsWizardOpen(false);
     onSelectShipment(newShipment.id);
   };
@@ -180,7 +203,7 @@ export const ShipmentsView: React.FC<ShipmentsViewProps> = ({
         </div>
 
         <button
-          onClick={() => setIsWizardOpen(true)}
+          onClick={openWizard}
           className="py-2.5 px-4 bg-teal-600 hover:bg-teal-700 text-white font-semibold text-xs rounded-lg shadow-xs flex items-center space-x-2 transition-colors"
         >
           <Plus className="w-4 h-4" />
@@ -267,17 +290,21 @@ export const ShipmentsView: React.FC<ShipmentsViewProps> = ({
 
       {/* New Shipment Modal Wizard */}
       {isWizardOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto">
-          <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-2xl overflow-hidden my-8">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="relative bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-2xl overflow-hidden my-8">
+            <ModalCloseButton onClose={closeWizard} />
             <div className="px-6 py-4 bg-slate-900 text-white flex justify-between items-center">
               <h3 className="font-bold text-base flex items-center gap-2">
                 <Ship className="w-5 h-5 text-teal-400" />
                 <span>+ Yeni Master Sevkiyat Dosyası Oluştur</span>
               </h3>
-              <button onClick={() => setIsWizardOpen(false)} className="text-slate-400 hover:text-white">✕</button>
             </div>
 
-            <div className="p-6 space-y-4 text-xs">
+            <div className="p-6 space-y-4 text-xs" onChange={() => setWizardDirty(true)}>
               <div>
                 <label className="block font-bold text-slate-800 mb-1">Müşteri (Alıcı Firma) Seçin *</label>
                 <select
@@ -386,7 +413,7 @@ export const ShipmentsView: React.FC<ShipmentsViewProps> = ({
 
               <div className="flex justify-end space-x-3 pt-4 border-t border-slate-200">
                 <button
-                  onClick={() => setIsWizardOpen(false)}
+                  onClick={closeWizard}
                   className="px-4 py-2 border border-slate-300 hover:bg-slate-100 text-slate-700 font-semibold rounded-lg"
                 >
                   İptal

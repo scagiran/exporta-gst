@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { Customer, CustomField } from '../types/exporta';
 import { Users, Plus, Search, FileSpreadsheet, Building, MapPin, Mail, Phone, Edit, Trash2, Globe, FileText, Download } from 'lucide-react';
 import { exportCustomersToExcel } from '../lib/excelExport';
+import { ModalCloseButton } from './ModalCloseButton';
+import { useEscapeClose } from '../lib/useEscapeClose';
 
 interface CustomersViewProps {
   customers: Customer[];
@@ -23,6 +25,21 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
   const [search, setSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
+  // Dirty flag: any input change inside the form bubbles to the form's onChange.
+  const [formDirty, setFormDirty] = useState(false);
+
+  const closeModal = () => {
+    if (
+      formDirty &&
+      !window.confirm('Kaydedilmemiş değişiklikler var, çıkmak istediğinize emin misiniz?')
+    ) {
+      return;
+    }
+    setIsModalOpen(false);
+    setFormDirty(false);
+  };
+
+  useEscapeClose(isModalOpen, closeModal);
 
   const customerCustomFields = customFields.filter((cf) => cf.module === 'customer');
 
@@ -60,12 +77,14 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
       phone: '',
       customFields: {},
     });
+    setFormDirty(false);
     setIsModalOpen(true);
   };
 
   const handleOpenEdit = (cust: Customer) => {
     setEditingCustomer(cust);
     setFormData({ ...cust, customFields: cust.customFields || {} });
+    setFormDirty(false);
     setIsModalOpen(true);
   };
 
@@ -95,6 +114,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
       onAddCustomer(newCust);
     }
 
+    setFormDirty(false);
     setIsModalOpen(false);
   };
 
@@ -254,16 +274,20 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
 
       {/* Add / Edit Customer Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto">
-          <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-2xl overflow-hidden my-8">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="relative bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-2xl overflow-hidden my-8">
+            <ModalCloseButton onClose={closeModal} />
             <div className="px-6 py-4 bg-slate-900 text-white flex justify-between items-center">
               <h3 className="font-bold text-base">
                 {editingCustomer ? 'Müşteri Bilgilerini Düzenle' : 'Yeni İhracat Müşterisi Ekle'}
               </h3>
-              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-white">✕</button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-6 space-y-4 text-xs">
+            <form onSubmit={handleSubmit} onChange={() => setFormDirty(true)} className="p-6 space-y-4 text-xs">
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">Müşteri Kodu *</label>
@@ -405,7 +429,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
               <div className="flex justify-end space-x-3 pt-4 border-t border-slate-200">
                 <button
                   type="button"
-                  onClick={() => setIsModalOpen(false)}
+                  onClick={closeModal}
                   className="px-4 py-2 border border-slate-300 hover:bg-slate-100 text-slate-700 font-semibold rounded-lg"
                 >
                   İptal

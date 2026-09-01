@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { CompanySettings, CustomField, DocType, DocTemplate, DocNumberFormat, CustomFieldType, CustomFieldModule, DocNumberHistory } from '../types/exporta';
 import { generateDocNumber, DOC_TYPE_NAMES } from '../lib/numbering';
 import { Settings, Building, Sliders, Hash, Layout, Plus, Trash2, Edit, Check, Eye, AlertCircle, History, RefreshCw } from 'lucide-react';
+import { ModalCloseButton } from './ModalCloseButton';
+import { useEscapeClose } from '../lib/useEscapeClose';
 
 interface SettingsViewProps {
   companySettings: CompanySettings;
@@ -31,6 +33,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
   // Custom field modal state
   const [isFieldModalOpen, setIsFieldModalOpen] = useState(false);
+  const [fieldFormDirty, setFieldFormDirty] = useState(false);
   const [newFieldName, setNewFieldName] = useState('');
   const [newFieldType, setNewFieldType] = useState<CustomFieldType>('text');
   const [newFieldModule, setNewFieldModule] = useState<CustomFieldModule>('shipment');
@@ -54,6 +57,24 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     'packing_list',
     'shipping_instruction',
   ];
+
+  const openFieldModal = () => {
+    setFieldFormDirty(false);
+    setIsFieldModalOpen(true);
+  };
+
+  const closeFieldModal = () => {
+    if (
+      fieldFormDirty &&
+      !window.confirm('Kaydedilmemiş değişiklikler var, çıkmak istediğinize emin misiniz?')
+    ) {
+      return;
+    }
+    setIsFieldModalOpen(false);
+    setFieldFormDirty(false);
+  };
+
+  useEscapeClose(isFieldModalOpen, closeFieldModal);
 
   const handleSaveCompany = (e: React.FormEvent) => {
     e.preventDefault();
@@ -79,6 +100,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     };
 
     onAddCustomField(field);
+    setFieldFormDirty(false);
     setIsFieldModalOpen(false);
     setNewFieldName('');
   };
@@ -336,7 +358,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               </p>
             </div>
             <button
-              onClick={() => setIsFieldModalOpen(true)}
+              onClick={openFieldModal}
               className="py-2 px-4 bg-teal-600 hover:bg-teal-700 text-white font-semibold text-xs rounded-lg shadow-xs flex items-center space-x-1.5"
             >
               <Plus className="w-4 h-4" />
@@ -392,14 +414,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
           {/* New Custom Field Modal */}
           {isFieldModalOpen && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto">
-              <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden my-8">
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto"
+              role="dialog"
+              aria-modal="true"
+            >
+              <div className="relative bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden my-8">
+                <ModalCloseButton onClose={closeFieldModal} />
                 <div className="px-6 py-4 bg-slate-900 text-white flex justify-between items-center">
                   <h3 className="font-bold text-base">+ Yeni Özel Alan Tanımla</h3>
-                  <button onClick={() => setIsFieldModalOpen(false)} className="text-slate-400 hover:text-white">✕</button>
                 </div>
 
-                <form onSubmit={handleAddCustomFieldSubmit} className="p-6 space-y-4 text-xs">
+                <form onSubmit={handleAddCustomFieldSubmit} onChange={() => setFieldFormDirty(true)} className="p-6 space-y-4 text-xs">
                   <div>
                     <label className="block font-semibold text-slate-700 mb-1">Alan Adı *</label>
                     <input
@@ -481,7 +507,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   <div className="flex justify-end space-x-3 pt-4 border-t border-slate-200">
                     <button
                       type="button"
-                      onClick={() => setIsFieldModalOpen(false)}
+                      onClick={closeFieldModal}
                       className="px-4 py-2 border border-slate-300 hover:bg-slate-100 text-slate-700 font-semibold rounded-lg"
                     >
                       İptal

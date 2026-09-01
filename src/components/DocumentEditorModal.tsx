@@ -3,13 +3,14 @@ import { MasterShipment, DocType, DocTemplate, CompanySettings, DocStatus, Shipm
 import { DOC_TYPE_NAMES } from '../lib/numbering';
 import { DocumentRenderer } from './DocumentRenderer';
 import { downloadPdfFromElement, printElement } from '../lib/pdfGenerator';
+import { ModalCloseButton } from './ModalCloseButton';
+import { useEscapeClose } from '../lib/useEscapeClose';
 import {
   Layout,
   Printer,
   Download,
   Copy,
   Check,
-  X,
   CheckCircle2,
   FileText,
   Image,
@@ -112,12 +113,30 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
   // Local state for shipment items to allow editing in real-time
   const [items, setItems] = useState<ShipmentItem[]>(shipment.items);
 
+  // Minimal dirty flag: flipped on by any editable control, cleared by "Kaydet".
+  // Note-only changes go through their own save button, so they clear it too.
+  const [dirty, setDirty] = useState(false);
+  const markDirty = () => setDirty(true);
+
+  const confirmClose = () => {
+    if (
+      dirty &&
+      !window.confirm('Kaydedilmemiş değişiklikler var, çıkmak istediğinize emin misiniz?')
+    ) {
+      return;
+    }
+    onClose();
+  };
+
+  useEscapeClose(isOpen, confirmClose);
+
   if (!isOpen) return null;
 
   const handleSaveNotes = () => {
     if (onUpdateDocNotes) {
       onUpdateDocNotes(shipment.id, docType, notesText);
     }
+    setDirty(false);
     setNotesSavedSuccess(true);
     setTimeout(() => setNotesSavedSuccess(false), 2000);
   };
@@ -127,6 +146,7 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
     if (onUpdateDocNotes) {
       onUpdateDocNotes(shipment.id, docType, '');
     }
+    setDirty(false);
     setNotesSavedSuccess(true);
     setTimeout(() => setNotesSavedSuccess(false), 2000);
   };
@@ -134,11 +154,13 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
   const handleTemplateChange = (tpl: DocTemplate) => {
     setCurrentTemplate(tpl);
     onUpdateTemplate(shipment.id, docType, tpl);
+    markDirty();
   };
 
   const handleStatusChange = (st: DocStatus) => {
     setCurrentStatus(st);
     onUpdateStatus(shipment.id, docType, st);
+    markDirty();
   };
 
   // Sync all proforma quantities to actual loading quantities
@@ -151,6 +173,7 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
     if (onUpdateShipmentItems) {
       onUpdateShipmentItems(shipment.id, synced);
     }
+    markDirty();
     setItemsSavedSuccess(true);
     setTimeout(() => setItemsSavedSuccess(false), 2000);
   };
@@ -162,6 +185,7 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
     if (onUpdateShipmentItems) {
       onUpdateShipmentItems(shipment.id, updated);
     }
+    markDirty();
   };
 
   // Add new product item row
@@ -185,6 +209,7 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
     if (onUpdateShipmentItems) {
       onUpdateShipmentItems(shipment.id, updated);
     }
+    markDirty();
   };
 
   // Delete product item row
@@ -194,6 +219,7 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
     if (onUpdateShipmentItems) {
       onUpdateShipmentItems(shipment.id, updated);
     }
+    markDirty();
   };
 
   // Save all document settings at once
@@ -206,6 +232,7 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
     if (onUpdateShipmentItems) {
       onUpdateShipmentItems(shipment.id, items);
     }
+    setDirty(false);
     setDocSaveSuccess(true);
     setTimeout(() => setDocSaveSuccess(false), 3000);
   };
@@ -220,6 +247,7 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
       if (onResetDocument) {
         onResetDocument(shipment.id, docType);
       }
+      setDirty(false);
       setDocResetSuccess(true);
       setTimeout(() => setDocResetSuccess(false), 3000);
     }
@@ -231,6 +259,7 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
     if (onUpdateShipmentItems) {
       onUpdateShipmentItems(shipment.id, updated);
     }
+    markDirty();
   };
 
   const handleDownloadPdf = async () => {
@@ -270,10 +299,15 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-xs p-4 overflow-y-auto">
-      <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden my-auto">
-        {/* Top Control Bar */}
-        <div className="px-6 py-4 bg-slate-900 text-white flex flex-wrap justify-between items-center gap-4 shrink-0">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-xs p-4 overflow-y-auto"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div className="relative bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden my-auto">
+        <ModalCloseButton onClose={confirmClose} />
+        {/* Top Control Bar — pr-14 keeps the wrapping toolbar clear of the fixed close button */}
+        <div className="px-6 py-4 pr-14 bg-slate-900 text-white flex flex-wrap justify-between items-center gap-4 shrink-0">
           <div className="flex items-center space-x-3">
             <div className="p-2 bg-teal-500/20 text-teal-400 rounded-lg">
               <FileText className="w-5 h-5" />
@@ -292,7 +326,10 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
           {/* Image toggle & settings for Quotation & Proforma */}
           <div className="flex items-center space-x-2 bg-slate-800 p-1.5 rounded-lg border border-slate-700">
             <button
-              onClick={() => setShowImages(!showImages)}
+              onClick={() => {
+                setShowImages(!showImages);
+                markDirty();
+              }}
               className={`px-3 py-1.5 rounded text-xs font-bold transition-all flex items-center space-x-1.5 ${
                 showImages ? 'bg-teal-500 text-slate-950 shadow-xs' : 'bg-slate-700 text-slate-300 hover:text-white'
               }`}
@@ -430,10 +467,6 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
             >
               <Printer className="w-3.5 h-3.5" />
               <span>Yazdır</span>
-            </button>
-
-            <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-white rounded-md transition-colors">
-              <X className="w-5 h-5" />
             </button>
           </div>
         </div>
@@ -687,7 +720,10 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
             <div className="space-y-2">
               <textarea
                 value={notesText}
-                onChange={(e) => setNotesText(e.target.value)}
+                onChange={(e) => {
+                  setNotesText(e.target.value);
+                  markDirty();
+                }}
                 placeholder="Bu belgeye özel teslimat şartları, banka açıklamaları veya gümrük notları yazın..."
                 rows={3}
                 className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-xs text-amber-100 placeholder:text-slate-500 focus:outline-none focus:border-amber-500 font-sans leading-relaxed"
@@ -704,7 +740,10 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
                     <button
                       key={idx}
                       type="button"
-                      onClick={() => setNotesText(preset)}
+                      onClick={() => {
+                        setNotesText(preset);
+                        markDirty();
+                      }}
                       className="px-2.5 py-1 bg-slate-700 hover:bg-amber-900/50 hover:text-amber-200 text-slate-300 text-[10px] rounded border border-slate-600 transition-colors"
                     >
                       Şablon {idx + 1}

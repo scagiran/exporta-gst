@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import * as XLSX from 'xlsx';
-import { Upload, FileSpreadsheet, Check, AlertTriangle, ArrowRight, Download, X, RefreshCw } from 'lucide-react';
+import { Upload, FileSpreadsheet, Check, AlertTriangle, ArrowRight, Download, RefreshCw } from 'lucide-react';
 import { Customer, Product } from '../types/exporta';
+import { ModalCloseButton } from './ModalCloseButton';
+import { useEscapeClose } from '../lib/useEscapeClose';
 
 interface ExcelImportModalProps {
   isOpen: boolean;
@@ -33,6 +35,19 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
   const [mappings, setMappings] = useState<ColumnMapping[]>([]);
   const [validatedRows, setValidatedRows] = useState<{ row: any; errors: string[]; valid: boolean }[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+
+  const handleResetModal = () => {
+    setStep(1);
+    setFileName('');
+    setRawHeaders([]);
+    setRawData([]);
+    setMappings([]);
+    setValidatedRows([]);
+    onClose();
+  };
+
+  // Wizard state is either already committed or freely discardable — no guard.
+  useEscapeClose(isOpen, handleResetModal);
 
   if (!isOpen) return null;
 
@@ -262,19 +277,14 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
     setStep(4);
   };
 
-  const handleResetModal = () => {
-    setStep(1);
-    setFileName('');
-    setRawHeaders([]);
-    setRawData([]);
-    setMappings([]);
-    setValidatedRows([]);
-    onClose();
-  };
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto">
-      <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-4xl overflow-hidden my-8">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div className="relative bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-4xl overflow-hidden my-8">
+        <ModalCloseButton onClose={handleResetModal} />
         {/* Header */}
         <div className="px-6 py-4 bg-slate-900 text-white flex justify-between items-center">
           <div className="flex items-center space-x-3">
@@ -286,12 +296,6 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
               <p className="text-xs text-slate-400">Excel veya CSV dosyanızdan otomatik veri aktarımı</p>
             </div>
           </div>
-          <button
-            onClick={handleResetModal}
-            className="p-1 text-slate-400 hover:text-white rounded-md transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
         </div>
 
         {/* Wizard Steps bar */}

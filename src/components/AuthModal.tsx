@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
-import { X, Building2, Lock, Mail, ArrowRight, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { Building2, Lock, Mail, ArrowRight, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { ExPortaLogo } from './ExPortaLogo';
+import { ModalCloseButton } from './ModalCloseButton';
+import { useEscapeClose } from '../lib/useEscapeClose';
 
 
 interface AuthModalProps {
@@ -20,6 +22,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  // Auth form holds no persistable state — Escape / X close directly.
+  useEscapeClose(isOpen, onClose);
 
   if (!isOpen) return null;
 
@@ -75,18 +80,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn"
+      role="dialog"
+      aria-modal="true"
+    >
       <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden">
-        
+        <ModalCloseButton onClose={onClose} />
+
         {/* Header */}
         <div className="p-6 bg-slate-900 text-white relative">
-          <button
-            onClick={onClose}
-            className="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors p-1 rounded-full hover:bg-slate-800"
-          >
-            <X className="w-5 h-5" />
-          </button>
-          
           <div className="flex items-center justify-between mb-1">
             <ExPortaLogo variant="light" size="md" showSubtitle={true} />
           </div>
