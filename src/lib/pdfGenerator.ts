@@ -156,10 +156,11 @@ export async function downloadPdfFromElement(
       orientation: 'portrait' as const,
     },
     // avoid-all: never split an element across a page boundary. These are
-    // single-page business documents by design (DocumentRenderer roots are
-    // min-h-[1050px] ≈ one A4). With fonts loaded the content fits; avoid-all
-    // keeps a stray couple of pixels of slop from spilling a mostly-blank
-    // page 2 instead of forcibly scaling the text down.
+    // single-page business documents by design. A4 minus the 10mm margin
+    // above gives an inner height of 277mm ≈ 1046px CSS at 96dpi; the
+    // DocumentRenderer roots are min-h-[1000px], so with the real font
+    // loaded the whole document sits inside one page with ~46px of
+    // headroom — no forced scale-down needed.
     pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
   };
 
@@ -223,12 +224,19 @@ export function printElement(element: HTMLElement): boolean {
       html, body {
         background: #fff !important;
         margin: 0;
-        padding: 20px;
+        /* No body padding: @page margin below is the only page inset. Body
+           padding here would stack on top of it, shrinking the printable
+           area ~40px and pushing the document (min-h 1000px) onto a 2nd
+           page. Keep this consistent with the PDF path, whose 10mm
+           html2pdf margin is likewise the sole inset. */
+        padding: 0;
         /* Ensure the popup actually requests the same web fonts, so
            fonts.ready has something to wait for and print metrics match
            the on-screen preview. */
         font-family: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, sans-serif;
       }
+      /* A4 minus 10mm all round ≈ 1047px usable at 96dpi — the document
+         root's min-height is 1000px, leaving ~47px of headroom. */
       @page { size: A4; margin: 10mm; }
     </style>
   </head>

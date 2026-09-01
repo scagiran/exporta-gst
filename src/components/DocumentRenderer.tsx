@@ -69,7 +69,7 @@ export const DocumentRenderer: React.FC<DocumentRendererProps> = ({
    * ======================================================================== */
   if (template === 'classic') {
     return (
-      <div className="w-full bg-white text-slate-900 font-sans text-[11px] p-8 border border-slate-300 shadow-md min-h-[1050px] relative">
+      <div className="w-full bg-white text-slate-900 font-sans text-[11px] p-8 border border-slate-300 shadow-md min-h-[1000px] relative">
         {/* Top Header */}
         <div className="flex justify-between items-start pb-6 border-b-2 border-slate-800">
           <div className="space-y-1 max-w-sm font-sans">
@@ -277,7 +277,7 @@ export const DocumentRenderer: React.FC<DocumentRendererProps> = ({
    * ======================================================================== */
   if (template === 'modern') {
     return (
-      <div className="w-full bg-white text-slate-900 font-sans text-[11px] p-8 border border-slate-200 shadow-md min-h-[1050px] relative">
+      <div className="w-full bg-white text-slate-900 font-sans text-[11px] p-8 border border-slate-200 shadow-md min-h-[1000px] relative">
         {/* Top Teal Accent Bar */}
         <div className="h-2 bg-teal-600 rounded-t w-full -mt-8 -mx-8 mb-6" />
 
@@ -446,7 +446,7 @@ export const DocumentRenderer: React.FC<DocumentRendererProps> = ({
    * TEMPLATE 03: COMPACT (High-density grid layout, compact margins)
    * ======================================================================== */
   return (
-    <div className="w-full bg-white text-slate-900 font-sans text-[10px] p-6 border border-slate-300 shadow-md min-h-[1050px] relative">
+    <div className="w-full bg-white text-slate-900 font-sans text-[10px] p-6 border border-slate-300 shadow-md min-h-[1000px] relative">
       <div className="flex justify-between items-center pb-3 border-b-2 border-slate-900">
         <div className="flex items-center gap-2.5">
           <CompanyLogo className="max-h-11 max-w-[120px]" />
