@@ -65,6 +65,19 @@ export function replaceOklchInText(text: string): string {
   );
 }
 
+/**
+ * html2pdf builds an invisible `position:fixed; z-index:1000` overlay on
+ * <body> during capture and removes it in a `.then()` once html2canvas
+ * resolves. If html2canvas rejects (bad colour function, tainted canvas, …)
+ * that cleanup never runs and the orphan overlay silently swallows every
+ * click app-wide until a reload. Always sweep it ourselves.
+ */
+function removeOrphanedHtml2pdfNodes(): void {
+  document
+    .querySelectorAll('.html2pdf__overlay, .html2pdf__container')
+    .forEach((n) => n.remove());
+}
+
 export async function downloadPdfFromElement(
   element: HTMLElement,
   filename: string
@@ -77,10 +90,23 @@ export async function downloadPdfFromElement(
     image: { type: 'jpeg' as const, quality: 0.98 },
     html2canvas: {
       scale: 2,
+      // useCORS + allowTaint:false keeps the canvas clean so the final
+      // toDataURL() can't throw a SecurityError on the Supabase / Unsplash
+      // images. Every remote <img> in DocumentRenderer sets
+      // crossOrigin="anonymous" and those hosts send ACAO:*.
       useCORS: true,
-      allowTaint: true,
+      allowTaint: false,
       logging: false,
       letterRendering: true,
+      // html2canvas defaults scrollX/scrollY to window.pageXOffset/pageYOffset
+      // and offsets the capture by them. html2pdf renders its own clone in an
+      // offscreen container pinned to top:0/left:0, so any page scroll behind
+      // the modal made the capture grab document (0,0) — the navbar/sidebar —
+      // instead of the document. Force the offset to zero.
+      x: 0,
+      y: 0,
+      scrollX: 0,
+      scrollY: 0,
       onclone: (clonedDoc: Document) => {
         // Clean up any oklch color references in style tags
         const styleElements = clonedDoc.querySelectorAll('style');
@@ -111,43 +137,73 @@ export async function downloadPdfFromElement(
   try {
     await html2pdf().set(options).from(element).save();
   } catch (err) {
-    console.error('PDF export failed, triggering window.print fallback', err);
-    window.print();
+    console.error('[ExPorta] PDF oluşturulamadı:', err);
+    throw err;
+  } finally {
+    removeOrphanedHtml2pdfNodes();
   }
 }
 
-export function printElement(element: HTMLElement): void {
+/**
+ * Opens a print-only window containing just `element`.
+ *
+ * Two things the old version got wrong:
+ *  - It copied `<link rel="stylesheet">` tags verbatim. Their `href` is a
+ *    root-relative path ("/assets/index-*.css") which, written into an
+ *    about:blank document, resolves against about:blank and never loads —
+ *    so the printout was an unstyled dump. Hrefs are now absolutised.
+ *  - `<style>` blocks still contained `oklch()` colours, which some print
+ *    engines drop. They are run through the same cleanup as the PDF path.
+ * Returns false when the popup was blocked so the caller can tell the user.
+ */
+export function printElement(element: HTMLElement): boolean {
   const printWindow = window.open('', '_blank');
   if (!printWindow) {
-    window.print();
-    return;
+    return false;
   }
 
-  const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
-    .map((s) => s.outerHTML)
+  const head = Array.from(
+    document.querySelectorAll('style, link[rel="stylesheet"]')
+  )
+    .map((node) => {
+      if (node.tagName === 'LINK') {
+        // Resolve relative href against the real origin.
+        const abs = (node as HTMLLinkElement).href;
+        return `<link rel="stylesheet" href="${abs}">`;
+      }
+      const css = node.textContent || '';
+      return `<style>${css.includes('oklch') ? replaceOklchInText(css) : css}</style>`;
+    })
     .join('\n');
 
-  printWindow.document.write(`
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <title>Yazdır - Exporta Document</title>
-        ${styles}
-        <style>
-          body { background: white !important; margin: 0; padding: 20px; }
-          @page { size: A4; margin: 10mm; }
-        </style>
-      </head>
-      <body>
-        ${element.outerHTML}
-        <script>
-          setTimeout(() => {
-            window.print();
-            window.close();
-          }, 400);
-        </script>
-      </body>
-    </html>
-  `);
+  printWindow.document.open();
+  printWindow.document.write(`<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Yazdır — ExPorta Belge</title>
+    ${head}
+    <style>
+      html, body { background: #fff !important; margin: 0; padding: 20px; }
+      @page { size: A4; margin: 10mm; }
+    </style>
+  </head>
+  <body>${element.outerHTML}</body>
+</html>`);
   printWindow.document.close();
+
+  // Wait for the copied stylesheets/fonts to load before firing the dialog,
+  // instead of a fixed 400ms guess that fired too early on slow loads.
+  const trigger = () => {
+    printWindow.focus();
+    printWindow.print();
+    printWindow.close();
+  };
+  if (printWindow.document.readyState === 'complete') {
+    setTimeout(trigger, 250);
+  } else {
+    printWindow.addEventListener('load', () => setTimeout(trigger, 250));
+  }
+
+  return true;
 }

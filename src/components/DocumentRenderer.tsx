@@ -158,7 +158,7 @@ export const DocumentRenderer: React.FC<DocumentRendererProps> = ({
                   {showImages && (
                     <td className="p-1 border border-slate-300 text-center">
                       {item.imageUrl ? (
-                        <img src={item.imageUrl} alt={item.productName} className="w-10 h-10 object-cover rounded border border-slate-300 mx-auto" />
+                        <img src={item.imageUrl} alt={item.productName} crossOrigin="anonymous" className="w-10 h-10 object-cover rounded border border-slate-300 mx-auto" />
                       ) : (
                         <span className="text-slate-400 text-[9px] italic">-</span>
                       )}
@@ -199,7 +199,7 @@ export const DocumentRenderer: React.FC<DocumentRendererProps> = ({
               {items.map((item) => (
                 <div key={item.id} className="bg-white p-2.5 rounded border border-slate-200 flex flex-col items-center text-center space-y-1.5 shadow-2xs">
                   {item.imageUrl ? (
-                    <img src={item.imageUrl} alt={item.productName} className="w-24 h-20 object-cover rounded border border-slate-200" />
+                    <img src={item.imageUrl} alt={item.productName} crossOrigin="anonymous" className="w-24 h-20 object-cover rounded border border-slate-200" />
                   ) : (
                     <div className="w-24 h-20 bg-slate-100 rounded border border-slate-200 flex items-center justify-center text-slate-400 text-[9px]">Görsel Bulunmuyor</div>
                   )}
@@ -354,7 +354,7 @@ export const DocumentRenderer: React.FC<DocumentRendererProps> = ({
                   {showImages && (
                     <td className="p-2 text-center">
                       {item.imageUrl ? (
-                        <img src={item.imageUrl} alt={item.productName} className="w-10 h-10 object-cover rounded border border-slate-200 mx-auto" />
+                        <img src={item.imageUrl} alt={item.productName} crossOrigin="anonymous" className="w-10 h-10 object-cover rounded border border-slate-200 mx-auto" />
                       ) : (
                         <span className="text-slate-400 text-[9px]">-</span>
                       )}
@@ -392,7 +392,7 @@ export const DocumentRenderer: React.FC<DocumentRendererProps> = ({
               {items.map((item) => (
                 <div key={item.id} className="bg-white p-3 rounded-lg border border-slate-200 flex flex-col items-center text-center space-y-1.5 shadow-2xs">
                   {item.imageUrl ? (
-                    <img src={item.imageUrl} alt={item.productName} className="w-24 h-20 object-cover rounded-md border border-slate-200" />
+                    <img src={item.imageUrl} alt={item.productName} crossOrigin="anonymous" className="w-24 h-20 object-cover rounded-md border border-slate-200" />
                   ) : (
                     <div className="w-24 h-20 bg-slate-100 rounded-md border border-slate-200 flex items-center justify-center text-slate-400 text-[9px]">Görsel Bulunmuyor</div>
                   )}
@@ -507,7 +507,7 @@ export const DocumentRenderer: React.FC<DocumentRendererProps> = ({
               {showImages && (
                 <td className="p-1 border border-slate-200 text-center">
                   {item.imageUrl ? (
-                    <img src={item.imageUrl} alt={item.productName} className="w-8 h-8 object-cover rounded border border-slate-200 mx-auto" />
+                    <img src={item.imageUrl} alt={item.productName} crossOrigin="anonymous" className="w-8 h-8 object-cover rounded border border-slate-200 mx-auto" />
                   ) : (
                     <span className="text-slate-400 text-[8px]">-</span>
                   )}
@@ -544,7 +544,7 @@ export const DocumentRenderer: React.FC<DocumentRendererProps> = ({
             {items.map((item) => (
               <div key={item.id} className="bg-white p-2 rounded border border-slate-200 flex flex-col items-center text-center space-y-1">
                 {item.imageUrl ? (
-                  <img src={item.imageUrl} alt={item.productName} className="w-16 h-14 object-cover rounded border border-slate-200" />
+                  <img src={item.imageUrl} alt={item.productName} crossOrigin="anonymous" className="w-16 h-14 object-cover rounded border border-slate-200" />
                 ) : (
                   <div className="w-16 h-14 bg-slate-100 rounded border border-slate-200 flex items-center justify-center text-slate-400 text-[8px]">Görsel Yok</div>
                 )}

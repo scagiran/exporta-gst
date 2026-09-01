@@ -270,16 +270,17 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
       await downloadPdfFromElement(documentRef.current, fileName);
     } catch (e) {
       console.error(e);
+      alert('PDF oluşturulamadı. Lütfen tekrar deneyin; sorun sürerse "Yazdır" ile tarayıcıdan PDF alabilirsiniz.');
     } finally {
       setIsGeneratingPdf(false);
     }
   };
 
   const handlePrint = () => {
-    if (documentRef.current) {
-      printElement(documentRef.current);
-    } else {
-      window.print();
+    if (!documentRef.current) return;
+    const opened = printElement(documentRef.current);
+    if (!opened) {
+      alert('Yazdırma penceresi açılamadı. Tarayıcınızın açılır pencere (pop-up) engelleyicisini bu site için kapatın.');
     }
   };
 
