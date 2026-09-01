@@ -1,6 +1,42 @@
 import { Customer, Product, MasterShipment, CompanySettings, CustomField, OnboardingStep, NoteItem } from '../types/exporta';
 import { DEFAULT_NUMBER_FORMATS } from '../lib/numbering';
 
+/**
+ * Blank company settings for a freshly created organization that has no
+ * `company_settings` row yet. Kept deliberately separate from
+ * INITIAL_COMPANY_SETTINGS: the INITIAL_* values below are the pre-login
+ * demo/marketing view only and must never leak into an authenticated
+ * real-org session (that was the "new signup shows Anadolu Dış Ticaret"
+ * bug). Only `defaultTemplates` carries non-blank values — those are
+ * layout choices, not company identity.
+ */
+export const EMPTY_COMPANY_SETTINGS: CompanySettings = {
+  companyName: '',
+  taxNo: '',
+  taxOffice: '',
+  address: '',
+  city: '',
+  country: '',
+  phone: '',
+  email: '',
+  website: '',
+  logoUrl: '',
+  stampUrl: '',
+  bankName: '',
+  bankBranch: '',
+  iban: '',
+  swiftCode: '',
+  defaultTemplates: {
+    quotation: 'classic',
+    proforma: 'classic',
+    sales_order: 'classic',
+    actual_loading: 'modern',
+    commercial_invoice: 'modern',
+    packing_list: 'compact',
+    shipping_instruction: 'modern',
+  },
+};
+
 export const INITIAL_COMPANY_SETTINGS: CompanySettings = {
   companyName: 'Anadolu Dış Ticaret ve Sanayi A.Ş.',
   taxNo: '0680123456',

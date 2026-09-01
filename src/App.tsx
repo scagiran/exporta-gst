@@ -46,6 +46,7 @@ import {
 } from './types/exporta';
 
 import {
+  EMPTY_COMPANY_SETTINGS,
   INITIAL_COMPANY_SETTINGS,
   INITIAL_CUSTOMERS,
   INITIAL_PRODUCTS,
@@ -90,11 +91,15 @@ function MainAppContent() {
   useEffect(() => {
     if (organization?.id) {
       fetchOrgData(organization.id).then((data) => {
+        // A null `data` means the fetch itself failed (network/etc.) — leave
+        // whatever is on screen. A non-null `data` is authoritative for this
+        // org, even when empty: an org with no rows yet must show blank
+        // settings and empty lists, never the pre-login demo seed.
         if (data) {
-          if (data.customers && data.customers.length > 0) setCustomers(data.customers);
-          if (data.products && data.products.length > 0) setProducts(data.products);
-          if (data.shipments && data.shipments.length > 0) setShipments(data.shipments);
-          if (data.companySettings) setCompanySettings(data.companySettings);
+          setCustomers(data.customers ?? []);
+          setProducts(data.products ?? []);
+          setShipments(data.shipments ?? []);
+          setCompanySettings(data.companySettings ?? EMPTY_COMPANY_SETTINGS);
         }
       });
 

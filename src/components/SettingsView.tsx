@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { CompanySettings, CustomField, DocType, DocTemplate, DocNumberFormat, CustomFieldType, CustomFieldModule, DocNumberHistory } from '../types/exporta';
 import { generateDocNumber, DOC_TYPE_NAMES } from '../lib/numbering';
 import { Settings, Building, Sliders, Hash, Layout, Plus, Trash2, Edit, Check, Eye, AlertCircle, History, RefreshCw, ImageIcon, Loader2, UploadCloud } from 'lucide-react';
@@ -36,8 +36,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const { organization } = useAuth();
   const [activeTab, setActiveTab] = useState<'company' | 'custom_fields' | 'numbering'>('company');
 
-  // Company settings local state
+  // Company settings local state. Re-synced whenever the prop changes so the
+  // form doesn't keep showing a snapshot taken before the org's real data
+  // (or its empty default) arrived from Supabase. User edits between fetch
+  // completions are transient and expected to be re-based on saved data.
   const [companyForm, setCompanyForm] = useState<CompanySettings>(companySettings);
+  useEffect(() => {
+    setCompanyForm(companySettings);
+  }, [companySettings]);
 
   // Logo upload state
   const logoInputRef = React.useRef<HTMLInputElement>(null);
