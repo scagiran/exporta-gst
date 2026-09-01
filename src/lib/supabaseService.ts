@@ -139,6 +139,62 @@ export async function saveCompanySettings(orgId: string, settings: CompanySettin
   if (error) console.error('Error saving company settings to Supabase:', error);
 }
 
+const LOGO_BUCKET = 'company-logos';
+export const LOGO_MAX_BYTES = 2 * 1024 * 1024; // 2 MB
+export const LOGO_ACCEPTED_TYPES = ['image/png', 'image/jpeg', 'image/svg+xml'];
+
+/**
+ * Uploads a company logo to Storage under `company-logos/{orgId}/logo.<ext>` and
+ * returns its public URL. The path is org-scoped so the RLS policy in
+ * `supabase/company_logos_storage.sql` can restrict writes to org members.
+ *
+ * A cache-busting query param is appended to the returned URL so a replaced logo
+ * shows immediately instead of a stale cached copy.
+ */
+export async function uploadCompanyLogo(
+  orgId: string,
+  file: File
+): Promise<{ url: string | null; error: string | null }> {
+  if (!LOGO_ACCEPTED_TYPES.includes(file.type)) {
+    return { url: null, error: 'Yalnızca PNG, JPEG veya SVG dosyaları yüklenebilir.' };
+  }
+  if (file.size > LOGO_MAX_BYTES) {
+    return { url: null, error: 'Dosya 2 MB sınırını aşıyor. Lütfen daha küçük bir görsel seçin.' };
+  }
+
+  const ext = file.type === 'image/png' ? 'png' : file.type === 'image/jpeg' ? 'jpg' : 'svg';
+  const path = `${orgId}/logo.${ext}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from(LOGO_BUCKET)
+    .upload(path, file, { upsert: true, contentType: file.type, cacheControl: '3600' });
+
+  if (uploadError) {
+    console.error('[ExPorta] Logo yüklenemedi:', uploadError.message, uploadError);
+    return { url: null, error: `Logo yüklenemedi: ${uploadError.message}` };
+  }
+
+  // Old logo may sit under a different extension (png -> svg etc.) — clear the rest.
+  const stale = ['png', 'jpg', 'svg'].filter((e) => e !== ext).map((e) => `${orgId}/logo.${e}`);
+  await supabase.storage.from(LOGO_BUCKET).remove(stale);
+
+  const { data } = supabase.storage.from(LOGO_BUCKET).getPublicUrl(path);
+  return { url: `${data.publicUrl}?v=${Date.now()}`, error: null };
+}
+
+/**
+ * Removes every stored logo variant for an org. Missing files are not an error.
+ */
+export async function deleteCompanyLogo(orgId: string): Promise<{ error: string | null }> {
+  const paths = ['png', 'jpg', 'svg'].map((e) => `${orgId}/logo.${e}`);
+  const { error } = await supabase.storage.from(LOGO_BUCKET).remove(paths);
+  if (error) {
+    console.error('[ExPorta] Logo silinemedi:', error.message, error);
+    return { error: `Logo silinemedi: ${error.message}` };
+  }
+  return { error: null };
+}
+
 /**
  * Fetches organization preferences (numbering formats, custom fields, notes,
  * onboarding progress). Returns null when the org has no saved preferences yet.

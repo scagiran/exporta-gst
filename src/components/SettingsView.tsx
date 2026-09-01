@@ -1,9 +1,16 @@
 import React, { useState } from 'react';
 import { CompanySettings, CustomField, DocType, DocTemplate, DocNumberFormat, CustomFieldType, CustomFieldModule, DocNumberHistory } from '../types/exporta';
 import { generateDocNumber, DOC_TYPE_NAMES } from '../lib/numbering';
-import { Settings, Building, Sliders, Hash, Layout, Plus, Trash2, Edit, Check, Eye, AlertCircle, History, RefreshCw } from 'lucide-react';
+import { Settings, Building, Sliders, Hash, Layout, Plus, Trash2, Edit, Check, Eye, AlertCircle, History, RefreshCw, ImageIcon, Loader2, UploadCloud } from 'lucide-react';
 import { ModalCloseButton } from './ModalCloseButton';
 import { useEscapeClose } from '../lib/useEscapeClose';
+import { useAuth } from '../context/AuthContext';
+import {
+  uploadCompanyLogo,
+  deleteCompanyLogo,
+  LOGO_MAX_BYTES,
+  LOGO_ACCEPTED_TYPES,
+} from '../lib/supabaseService';
 
 interface SettingsViewProps {
   companySettings: CompanySettings;
@@ -26,10 +33,69 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onUpdateNumberFormat,
   numberHistory,
 }) => {
+  const { organization } = useAuth();
   const [activeTab, setActiveTab] = useState<'company' | 'custom_fields' | 'numbering'>('company');
 
   // Company settings local state
   const [companyForm, setCompanyForm] = useState<CompanySettings>(companySettings);
+
+  // Logo upload state
+  const logoInputRef = React.useRef<HTMLInputElement>(null);
+  const [logoBusy, setLogoBusy] = useState(false);
+  const [logoError, setLogoError] = useState<string | null>(null);
+
+  /**
+   * Persists a logoUrl change straight away (both local form + parent/Supabase),
+   * so the logo survives even if the user never presses "Ayarları Kaydet".
+   */
+  const persistLogoUrl = (logoUrl: string | undefined) => {
+    setCompanyForm((prev) => ({ ...prev, logoUrl }));
+    onUpdateCompanySettings({ ...companyForm, logoUrl });
+  };
+
+  const handleLogoFile = async (file: File | undefined) => {
+    setLogoError(null);
+    if (!file) return;
+
+    if (!organization?.id) {
+      setLogoError('Organizasyon yüklenmediği için logo kaydedilemedi. Çıkış yapıp tekrar girin.');
+      return;
+    }
+    if (!LOGO_ACCEPTED_TYPES.includes(file.type)) {
+      setLogoError('Yalnızca PNG, JPEG veya SVG dosyaları yüklenebilir.');
+      return;
+    }
+    if (file.size > LOGO_MAX_BYTES) {
+      setLogoError('Dosya 2 MB sınırını aşıyor. Lütfen daha küçük bir görsel seçin.');
+      return;
+    }
+
+    setLogoBusy(true);
+    const { url, error } = await uploadCompanyLogo(organization.id, file);
+    setLogoBusy(false);
+
+    if (error || !url) {
+      setLogoError(error || 'Logo yüklenemedi.');
+      return;
+    }
+    persistLogoUrl(url);
+  };
+
+  const handleRemoveLogo = async () => {
+    setLogoError(null);
+    if (!organization?.id) {
+      persistLogoUrl(undefined);
+      return;
+    }
+    setLogoBusy(true);
+    const { error } = await deleteCompanyLogo(organization.id);
+    setLogoBusy(false);
+    if (error) {
+      setLogoError(error);
+      return;
+    }
+    persistLogoUrl(undefined);
+  };
 
   // Custom field modal state
   const [isFieldModalOpen, setIsFieldModalOpen] = useState(false);
@@ -264,6 +330,80 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     onChange={(e) => setCompanyForm({ ...companyForm, email: e.target.value })}
                     className="w-full border border-slate-300 rounded-lg p-2"
                   />
+                </div>
+              </div>
+            </div>
+
+            {/* Company Logo */}
+            <div className="mt-6">
+              <label className="block font-semibold text-slate-700 mb-1">Firma Logosu</label>
+              <p className="text-[11px] text-slate-500 mb-3">
+                PNG, JPEG veya SVG · en fazla 2 MB. Logo, üç belge şablonunda da firma
+                adının yanında görünür.
+              </p>
+
+              <div className="flex items-center gap-4">
+                <div className="w-28 h-28 shrink-0 border border-slate-200 rounded-lg bg-slate-50 flex items-center justify-center overflow-hidden">
+                  {companyForm.logoUrl ? (
+                    <img
+                      src={companyForm.logoUrl}
+                      alt="Firma logosu"
+                      className="max-w-full max-h-full object-contain"
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center text-slate-400">
+                      <ImageIcon className="w-7 h-7" />
+                      <span className="text-[9px] mt-1">Logo yok</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <input
+                    ref={logoInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/svg+xml"
+                    className="hidden"
+                    onChange={(e) => {
+                      handleLogoFile(e.target.files?.[0]);
+                      e.target.value = '';
+                    }}
+                  />
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={logoBusy}
+                      onClick={() => logoInputRef.current?.click()}
+                      className="py-2 px-3.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs rounded-lg border border-slate-300 flex items-center gap-2 disabled:opacity-50"
+                    >
+                      {logoBusy ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <UploadCloud className="w-4 h-4 text-teal-600" />
+                      )}
+                      <span>{companyForm.logoUrl ? 'Logoyu Değiştir' : 'Logo Yükle'}</span>
+                    </button>
+
+                    {companyForm.logoUrl && (
+                      <button
+                        type="button"
+                        disabled={logoBusy}
+                        onClick={handleRemoveLogo}
+                        className="py-2 px-3 bg-white hover:bg-red-50 text-slate-600 hover:text-red-600 font-semibold text-xs rounded-lg border border-slate-300 flex items-center gap-1.5 disabled:opacity-50"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Kaldır</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {logoError && (
+                    <p className="text-[11px] text-red-600 flex items-start gap-1.5 max-w-xs">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                      <span>{logoError}</span>
+                    </p>
+                  )}
                 </div>
               </div>
             </div>

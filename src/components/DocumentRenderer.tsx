@@ -51,6 +51,19 @@ export const DocumentRenderer: React.FC<DocumentRendererProps> = ({
   const currency = shipment.payment.currency || 'EUR';
   const docTitle = DOC_TYPE_ENGLISH_TITLES[docType] || toEnglishUpper(docType);
 
+  // Company logo. Rendered only when set, so an empty logoUrl leaves every
+  // template byte-identical to before. crossOrigin="anonymous" matches what the
+  // canvas-based PDF export (html2canvas useCORS) needs for Supabase Storage URLs.
+  const CompanyLogo: React.FC<{ className?: string }> = ({ className = '' }) =>
+    companySettings.logoUrl ? (
+      <img
+        src={companySettings.logoUrl}
+        alt={`${companySettings.companyName} logo`}
+        crossOrigin="anonymous"
+        className={`object-contain ${className}`}
+      />
+    ) : null;
+
   /* ========================================================================
    * TEMPLATE 01: CLASSIC (Traditional Serif/Sans, double line box, classic logo)
    * ======================================================================== */
@@ -60,6 +73,7 @@ export const DocumentRenderer: React.FC<DocumentRendererProps> = ({
         {/* Top Header */}
         <div className="flex justify-between items-start pb-6 border-b-2 border-slate-800">
           <div className="space-y-1 max-w-sm font-sans">
+            <CompanyLogo className="max-h-16 max-w-[180px] mb-2" />
             <h1 className="font-extrabold text-lg text-slate-900 tracking-wide uppercase">{companySettings.companyName}</h1>
             <p className="text-[10px] text-slate-600 leading-tight">{companySettings.address}, {companySettings.city} / {companySettings.country}</p>
             <p className="text-[10px] text-slate-600">Tel: {companySettings.phone} | Email: {companySettings.email}</p>
@@ -271,7 +285,11 @@ export const DocumentRenderer: React.FC<DocumentRendererProps> = ({
         <div className="flex justify-between items-start pb-6 border-b border-slate-200">
           <div className="space-y-1">
             <div className="flex items-center space-x-2">
-              <div className="w-7 h-7 bg-teal-600 text-white font-bold text-sm flex items-center justify-center rounded">eX</div>
+              {companySettings.logoUrl ? (
+                <CompanyLogo className="max-h-10 max-w-[140px]" />
+              ) : (
+                <div className="w-7 h-7 bg-teal-600 text-white font-bold text-sm flex items-center justify-center rounded">eX</div>
+              )}
               <span className="font-extrabold text-base text-slate-900 tracking-tight">{companySettings.companyName}</span>
             </div>
             <p className="text-[10px] text-slate-500">{companySettings.address}, {companySettings.city}</p>
@@ -430,9 +448,12 @@ export const DocumentRenderer: React.FC<DocumentRendererProps> = ({
   return (
     <div className="w-full bg-white text-slate-900 font-sans text-[10px] p-6 border border-slate-300 shadow-md min-h-[1050px] relative">
       <div className="flex justify-between items-center pb-3 border-b-2 border-slate-900">
-        <div>
-          <h1 className="font-extrabold text-sm text-slate-900 uppercase">{companySettings.companyName}</h1>
-          <p className="text-[9px] text-slate-600">{companySettings.address} | Tax: {companySettings.taxNo}</p>
+        <div className="flex items-center gap-2.5">
+          <CompanyLogo className="max-h-11 max-w-[120px]" />
+          <div>
+            <h1 className="font-extrabold text-sm text-slate-900 uppercase">{companySettings.companyName}</h1>
+            <p className="text-[9px] text-slate-600">{companySettings.address} | Tax: {companySettings.taxNo}</p>
+          </div>
         </div>
         <div className="text-right">
           <h2 className="text-base font-black font-mono text-slate-900">{toEnglishUpper(docTitle)}</h2>
