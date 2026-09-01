@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Product, CustomField } from '../types/exporta';
-import { Package, Plus, Search, FileSpreadsheet, Tag, Scale, DollarSign, Edit, Trash2, Globe } from 'lucide-react';
+import { Package, Plus, Search, FileSpreadsheet, Tag, Scale, DollarSign, Edit, Trash2, Globe, Download } from 'lucide-react';
+import { exportProductsToExcel } from '../lib/excelExport';
 
 interface ProductsViewProps {
   products: Product[];
@@ -100,6 +101,13 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
     setIsModalOpen(false);
   };
 
+  const handleExportExcel = () => {
+    const ok = exportProductsToExcel(products);
+    if (!ok) {
+      alert('Dışa aktarılacak ürün kaydı yok. Önce ürün ekleyin veya Excel’den içe aktarın.');
+    }
+  };
+
   return (
     <div className="p-6 space-y-6 bg-slate-50 min-h-[calc(100vh-4rem)]">
       {/* Top Banner & Actions */}
@@ -115,13 +123,22 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
         </div>
 
         <div className="flex items-center space-x-3">
-          {/* Excel Import button explicitly requested in rule 4 */}
           <button
             onClick={onOpenExcelImport}
             className="py-2 px-3.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs rounded-lg border border-slate-300 flex items-center space-x-2 transition-colors"
           >
             <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-            <span>[Excel'den İçe Aktar]</span>
+            <span>Excel'den İçe Aktar</span>
+          </button>
+
+          <button
+            onClick={handleExportExcel}
+            disabled={products.length === 0}
+            title={products.length === 0 ? 'Dışa aktarılacak ürün kaydı yok' : undefined}
+            className="py-2 px-3.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs rounded-lg border border-slate-300 flex items-center space-x-2 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <Download className="w-4 h-4 text-teal-600" />
+            <span>Excel'e Dışa Aktar</span>
           </button>
 
           <button

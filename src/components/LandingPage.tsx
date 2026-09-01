@@ -53,7 +53,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartDemo }) => {
         'Sınırsız Master Sevkiyat Oluşturma',
         '7 Aşamalı Otomatik Belge Workflow',
         '3 Profesyonel Şablon (Classic, Modern, Compact)',
-        'Excel İçe Aktarım (Müşteri & Ürün)',
+        'Excel İçe/Dışa Aktarım (Müşteri & Ürün)',
         'Özel Alan Tanımlama (Custom Fields)',
         'Otomatik Belge Numaralandırma',
         'Supabase Bulut Senkronizasyonu & Yedekleme',

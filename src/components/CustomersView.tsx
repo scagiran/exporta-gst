@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Customer, CustomField } from '../types/exporta';
-import { Users, Plus, Search, FileSpreadsheet, Building, MapPin, Mail, Phone, Edit, Trash2, Globe, FileText } from 'lucide-react';
+import { Users, Plus, Search, FileSpreadsheet, Building, MapPin, Mail, Phone, Edit, Trash2, Globe, FileText, Download } from 'lucide-react';
+import { exportCustomersToExcel } from '../lib/excelExport';
 
 interface CustomersViewProps {
   customers: Customer[];
@@ -97,6 +98,13 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
     setIsModalOpen(false);
   };
 
+  const handleExportExcel = () => {
+    const ok = exportCustomersToExcel(customers);
+    if (!ok) {
+      alert('Dışa aktarılacak müşteri kaydı yok. Önce müşteri ekleyin veya Excel’den içe aktarın.');
+    }
+  };
+
   return (
     <div className="p-6 space-y-6 bg-slate-50 min-h-[calc(100vh-4rem)]">
       {/* Top Banner & Actions */}
@@ -112,13 +120,22 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
         </div>
 
         <div className="flex items-center space-x-3">
-          {/* Excel Import button explicitly requested in rule 4 */}
           <button
             onClick={onOpenExcelImport}
             className="py-2 px-3.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs rounded-lg border border-slate-300 flex items-center space-x-2 transition-colors"
           >
             <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-            <span>[Excel'den İçe Aktar]</span>
+            <span>Excel'den İçe Aktar</span>
+          </button>
+
+          <button
+            onClick={handleExportExcel}
+            disabled={customers.length === 0}
+            title={customers.length === 0 ? 'Dışa aktarılacak müşteri kaydı yok' : undefined}
+            className="py-2 px-3.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs rounded-lg border border-slate-300 flex items-center space-x-2 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <Download className="w-4 h-4 text-teal-600" />
+            <span>Excel'e Dışa Aktar</span>
           </button>
 
           <button
