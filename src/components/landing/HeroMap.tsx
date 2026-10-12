@@ -49,9 +49,8 @@ const PLACE: Record<string, string> = { Londra: 'left', Rotterdam: 'below', Hamb
 const CONTEXT = ['İstanbul', 'Ankara'];
 const EQUATOR_KM = 40075;
 
-const HOOK = 'Hâlâ Excel ve e-posta arasında mı kayboluyorsunuz?';
+const HOOK = 'Siz de Excel ve e-posta arasında mı kayboluyorsunuz?';
 const DOCS = ['Teklif', 'Proforma', 'Satış Emri', 'Yükleme', 'Ticari Fatura', 'Çeki Listesi', 'Talimat'];
-const HUD = ['Dert', 'Tek kayıt', 'Kapı'];
 
 function rng(seed: number) {
   let s = seed >>> 0;
@@ -124,12 +123,10 @@ export const HeroMap: React.FC<HeroMapProps> = ({ onSignup, onSignin }) => {
       o: -1,
       live: false,
     }));
-    const hudItems = Array.from(stage.querySelectorAll<HTMLElement>('.xp-hud li'));
     const pinEls = new Map<string, HTMLElement>();
     stage.querySelectorAll<HTMLElement>('[data-pin]').forEach((el) => pinEls.set(el.dataset.pin as string, el));
     const pinState = new Map<string, { x: number; y: number; o: number }>();
 
-    let hudIdx = -1;
     let atEnd = false;
     let isWorld = false;
     let disposed = false;
@@ -376,11 +373,6 @@ export const HeroMap: React.FC<HeroMapProps> = ({ onSignup, onSignin }) => {
           b.el.style.setProperty('--o', o.toFixed(3));
         }
       }
-      const idx = p < 0.2 ? 0 : p < 0.5 ? 1 : 2;
-      if (idx !== hudIdx) {
-        hudIdx = idx;
-        hudItems.forEach((li, i) => li.classList.toggle('is-on', i === idx));
-      }
       const end = p > 0.8;
       if (end !== atEnd) {
         atEnd = end;
@@ -493,7 +485,6 @@ export const HeroMap: React.FC<HeroMapProps> = ({ onSignup, onSignin }) => {
         b.k = -1;
         b.o = -1;
       });
-      hudIdx = -1;
       atEnd = false;
       pinState.clear();
       shown = target = heroProgress();
@@ -653,13 +644,6 @@ export const HeroMap: React.FC<HeroMapProps> = ({ onSignup, onSignin }) => {
             </div>
           </dl>
 
-          <ol className="xp-hud xp-hud-chip" aria-hidden="true">
-            {HUD.map((h, i) => (
-              <li key={h}>
-                0{i + 1} {h}
-              </li>
-            ))}
-          </ol>
 
           <div className="xp-corner">
             <svg ref={ringRef} className="xp-ring" viewBox="0 0 48 48" aria-hidden="true">

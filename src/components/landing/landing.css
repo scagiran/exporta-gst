@@ -768,40 +768,7 @@
   opacity: var(--km);
 }
 
-/* HUD: where we are in the story, plus a way past it */
-.xp-hud {
-  position: absolute;
-  left: var(--gutter);
-  bottom: 30px;
-  display: grid;
-  gap: 8px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  font-family: var(--f-mono);
-  font-size: 12.5px;
-}
-.xp-hud li {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: var(--mist-2);
-  transition: color 0.5s var(--ease);
-}
-.xp-hud li::before {
-  content: '';
-  width: 18px;
-  height: 1px;
-  background: currentColor;
-  transition: width 0.5s var(--ease), background-color 0.5s var(--ease);
-}
-.xp-hud li.is-on {
-  color: var(--sheet);
-}
-.xp-hud li.is-on::before {
-  width: 34px;
-  background: var(--gate);
-}
+/* chip backing for small text over the map, plus a way past the hero */
 .xp-hud-chip {
   padding: 10px 14px;
   background: rgba(8, 16, 27, 0.55);
@@ -859,12 +826,10 @@
 .xp-stage.map-ready .xp-ring {
   opacity: 0;
 }
-.xp-stage.at-end .xp-hud,
 .xp-stage.at-end .xp-corner {
   opacity: 0;
   visibility: hidden;
 }
-.xp-hud,
 .xp-corner {
   transition: opacity 0.5s var(--ease), visibility 0.5s;
 }
@@ -887,7 +852,6 @@
   }
 }
 @media (max-height: 560px) {
-  .xp-hud,
   .xp-b2-label,
   .xp-readout {
     display: none;
@@ -2403,36 +2367,71 @@ body.xp-paused .xp *::after {
   font-size: 18px;
   color: var(--ink-2);
 }
-.xp-about-arc {
-  width: min(420px, 80%);
-  margin-top: 46px;
-  color: var(--gate-ink);
+/* one person, one desk, one screen */
+.xp-desk-scene {
+  max-width: 560px;
+  margin-top: 40px;
 }
-.xp-about-arc path {
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 3;
-  stroke-linecap: round;
-  stroke-dasharray: 340;
-  stroke-dashoffset: 340;
-  transition: stroke-dashoffset 2.2s var(--ease) 0.3s;
+.xp-desk-scene svg {
+  width: 100%;
+  height: auto;
+  overflow: visible;
 }
-[data-reveal].in .xp-about-arc path {
-  stroke-dashoffset: 0;
+.xp-desk-item rect:first-child {
+  fill: #fff;
+  stroke: var(--rule);
+  stroke-width: 1;
 }
-.xp-about-arc circle {
-  fill: currentColor;
-  opacity: 0;
-  transition: opacity 0.6s var(--ease) 2.2s;
+.xp-desk-item text {
+  font-family: var(--f-body);
+  font-size: 12px;
+  font-weight: 500;
+  fill: var(--ink);
 }
-[data-reveal].in .xp-about-arc circle {
-  opacity: 1;
-  animation: xp-breathe 5s var(--ease-io) -1s infinite;
+.xp-desk-badge rect {
+  fill: var(--sheet);
+  stroke: var(--ink-3);
+  stroke-width: 1;
+  transition: fill 0.4s var(--ease), stroke 0.4s var(--ease);
 }
-@keyframes xp-breathe {
-  50% {
-    opacity: 0.35;
-  }
+.xp-desk-badge text {
+  font-family: var(--f-body);
+  font-size: 12.5px;
+  font-weight: 600;
+  fill: var(--ink);
+  transition: fill 0.4s var(--ease);
+}
+.xp-desk-badge.is-done rect {
+  fill: var(--gate-ink);
+  stroke: var(--gate-ink);
+}
+.xp-desk-badge.is-done text {
+  fill: #fff;
+}
+.xp-desk-glow {
+  filter: blur(16px);
+}
+.xp-desk-tile rect {
+  fill: #fff;
+  stroke: var(--rule);
+  stroke-width: 1;
+  transition: stroke 0.4s var(--ease);
+}
+.xp-desk-tile.is-lit rect {
+  stroke: var(--gate-ink);
+}
+.xp-desk-tile .lbl {
+  font-family: var(--f-body);
+  font-size: 9.5px;
+  font-weight: 500;
+  fill: var(--ink-2);
+}
+.xp-desk-tile .val {
+  font-family: var(--f-display);
+  font-stretch: 108%;
+  font-size: 15px;
+  font-weight: 800;
+  fill: var(--ink);
 }
 .xp-facts {
   margin: 0;
@@ -2926,12 +2925,6 @@ body.xp-paused .xp *::after {
   [data-reveal] .r {
     opacity: 1;
     transform: none;
-  }
-  .xp-about-arc path {
-    stroke-dashoffset: 0;
-  }
-  .xp-about-arc circle {
-    opacity: 1;
   }
   .xp-route-vertical::after {
     transform: none;

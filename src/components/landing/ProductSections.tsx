@@ -1,8 +1,9 @@
 import React, { useRef, useState } from 'react';
 import { Play, FileDown, Printer } from 'lucide-react';
 import { MEDIA } from './media';
+import { DeskScene } from './DeskScene';
 
-const i = (n: number) => ({ '--i': n } as React.CSSProperties);
+const i =(n: number) => ({ '--i': n } as React.CSSProperties);
 
 /* ------------------------------------------------------------------ */
 /* 4. The tour: the ExPorta film, with its ten chapters                */
@@ -272,10 +273,7 @@ export const AboutSection: React.FC = () => (
           aynı kişidir. ExPorta bu kişinin masasını tek ekranda toplar: müşteriler, ürünler, sevkiyatlar ve yedi ihracat
           belgesi.
         </p>
-        <svg className="xp-about-arc" viewBox="0 0 340 60" aria-hidden="true">
-          <path d="M6 52 Q170 -6 330 44" />
-          <circle cx="330" cy="44" r="5" />
-        </svg>
+        <DeskScene />
       </div>
 
       <dl className="xp-facts" data-reveal>
