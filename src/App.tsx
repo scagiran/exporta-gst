@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { NavTab, Sidebar } from './components/Sidebar';
 import { Navbar } from './components/Navbar';
 import { LandingPage } from './components/LandingPage';
@@ -57,12 +57,37 @@ import {
 } from './data/initialDemoData';
 
 import { DEFAULT_NUMBER_FORMATS, generateDocNumber } from './lib/numbering';
+import { rememberHomeCity } from './lib/homeCity';
 
 function MainAppContent() {
-  const { user, organization } = useAuth();
+  const { user, organization, loading } = useAuth();
 
-  // Navigation State
-  const [activeTab, setActiveTab] = useState<NavTab>('dashboard');
+  // Navigation State. Visitors land on the public site; signed-in users are
+  // moved to the dashboard by the effect below.
+  const [activeTab, setActiveTab] = useState<NavTab>('landing');
+
+  // `loading` also flips during every sign-in attempt, so the first resolved
+  // session check is remembered separately. Until then nothing is rendered,
+  // which keeps a returning user from seeing the public site flash past.
+  const [authReady, setAuthReady] = useState(false);
+  useEffect(() => {
+    if (!loading) setAuthReady(true);
+  }, [loading]);
+
+  // Whenever a session appears (returning visit, sign-in or sign-up from the
+  // public site), open the dashboard.
+  const prevUserId = useRef<string | null>(null);
+  useEffect(() => {
+    const id = user?.id ?? null;
+    if (id && id !== prevUserId.current) {
+      setActiveTab((tab) => {
+        if (tab !== 'landing') return tab;
+        window.scrollTo(0, 0);
+        return 'dashboard';
+      });
+    }
+    prevUserId.current = id;
+  }, [user?.id]);
   const [selectedShipmentId, setSelectedShipmentId] = useState<string | null>(null);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
 
@@ -100,6 +125,8 @@ function MainAppContent() {
           setProducts(data.products ?? []);
           setShipments(data.shipments ?? []);
           setCompanySettings(data.companySettings ?? EMPTY_COMPANY_SETTINGS);
+          // The public map marks this city on the next visit from this browser.
+          rememberHomeCity(data.companySettings?.city);
         }
       });
 
@@ -219,7 +246,10 @@ function MainAppContent() {
   // Company Settings Action
   const handleUpdateCompanySettings = (updated: CompanySettings) => {
     setCompanySettings(updated);
-    if (organization?.id) saveCompanySettings(organization.id, updated);
+    if (organization?.id) {
+      saveCompanySettings(organization.id, updated);
+      rememberHomeCity(updated.city);
+    }
   };
 
   // Custom Field Actions
@@ -403,15 +433,18 @@ function MainAppContent() {
   const selectedShipment = shipments.find((s) => s.id === selectedShipmentId) || null;
   const docEditorShipment = shipments.find((s) => s.id === docEditorShipmentId) || null;
 
+  if (!authReady) {
+    return <div className="min-h-screen bg-slate-950" aria-busy="true" />;
+  }
+
   if (activeTab === 'landing') {
     return (
-      <div className="min-h-screen bg-slate-950 text-white font-sans antialiased selection:bg-teal-500 selection:text-slate-950">
-        <LandingPage onStartDemo={() => setActiveTab('dashboard')} />
-        <AuthModal
-          isOpen={isAuthModalOpen}
-          onClose={() => setIsAuthModalOpen(false)}
-        />
-      </div>
+      <LandingPage
+        onStartDemo={() => {
+          setActiveTab('dashboard');
+          window.scrollTo(0, 0);
+        }}
+      />
     );
   }
 

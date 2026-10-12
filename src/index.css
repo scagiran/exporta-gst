@@ -1,14 +1,55 @@
 @import "tailwindcss";
 
+/*
+ * ExPorta palette, applied app-wide from one place.
+ * Tailwind's slate and teal scales are re-pointed at the harbor palette
+ * (paper, ink navy, night) so every panel follows without touching
+ * component classes. teal-400 stays #2DD4BF: it is the logo's arc color.
+ */
+@theme {
+  --font-sans: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+
+  --color-slate-50: #f2f5f4;
+  --color-slate-100: #e6eceb;
+  --color-slate-200: #d3dcdd;
+  --color-slate-300: #b2c0c5;
+  --color-slate-400: #8597a2;
+  --color-slate-500: #5e7181;
+  --color-slate-600: #475a6b;
+  --color-slate-700: #33475a;
+  --color-slate-800: #1e3349;
+  --color-slate-900: #12263a;
+  --color-slate-950: #0b1a2b;
+
+  --color-teal-50: #ecf8f6;
+  --color-teal-100: #d2f0eb;
+  --color-teal-200: #a6e2d8;
+  --color-teal-300: #6fd8c7;
+  --color-teal-400: #2dd4bf;
+  --color-teal-500: #1bb3a2;
+  --color-teal-600: #0e8f84;
+  --color-teal-700: #0b7368;
+  --color-teal-800: #0c5b54;
+  --color-teal-900: #0d4a46;
+  --color-teal-950: #052d2b;
+}
+
 @layer base {
+  html,
   body {
-    font-family: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, sans-serif;
+    overflow-x: hidden;
+    overflow-x: clip;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background: #f2f5f4;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
 
   code, kbd, samp, pre {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-mono);
   }
 }
-

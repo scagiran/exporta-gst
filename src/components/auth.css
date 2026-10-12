@@ -1,0 +1,236 @@
+/* Shared sign-in / sign-up form. Lives on a "sheet" surface in both the modal and the landing page. */
+.xa {
+  --xa-ink: #0f2b48;
+  --xa-ink-2: #4a5b6e;
+  --xa-rule: #d2dadb;
+  --xa-field: #6f8290;
+  --xa-sheet: #fafbfa;
+  --xa-paper: #eef1f0;
+  --xa-gate: #2dd4bf;
+  --xa-gate-ink: #0b7368;
+  --xa-night: #0b1a2b;
+  --xa-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  color: var(--xa-ink);
+}
+
+.xa-tabs {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-bottom: 1px solid var(--xa-rule);
+}
+.xa-tab {
+  padding: 14px 8px 13px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--xa-ink-2);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  transition: color 0.3s var(--xa-ease);
+}
+.xa-tab:hover,
+.xa-tab.is-on {
+  color: var(--xa-ink);
+}
+.xa-tab-ink {
+  position: absolute;
+  left: 0;
+  bottom: -1px;
+  width: 50%;
+  height: 2px;
+  background: var(--xa-ink);
+  transition: transform 0.45s var(--xa-ease);
+}
+.xa-tab-ink.is-right {
+  transform: translateX(100%);
+}
+
+.xa-form {
+  display: grid;
+  gap: 18px;
+  padding: 24px 0 0;
+}
+
+.xa-field label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--xa-ink);
+}
+.xa-input {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.xa-input > svg {
+  position: absolute;
+  left: 14px;
+  width: 16px;
+  height: 16px;
+  color: var(--xa-ink-2);
+  pointer-events: none;
+}
+.xa-input input {
+  width: 100%;
+  height: 48px;
+  padding: 0 44px 0 42px;
+  font: inherit;
+  font-size: 15px;
+  color: var(--xa-ink);
+  background: #fff;
+  border: 1px solid var(--xa-field);
+  border-radius: 10px;
+  transition: border-color 0.25s var(--xa-ease), box-shadow 0.25s var(--xa-ease);
+}
+.xa-input input::placeholder {
+  color: #7d8d99;
+}
+.xa-input input:focus {
+  outline: none;
+  border-color: var(--xa-gate-ink);
+  box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.35);
+}
+.xa-eye {
+  position: absolute;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  color: var(--xa-ink-2);
+  background: none;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.xa-eye:hover {
+  color: var(--xa-ink);
+  background: var(--xa-paper);
+}
+.xa-eye svg {
+  width: 18px;
+  height: 18px;
+}
+.xa-help {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  color: var(--xa-ink-2);
+}
+
+.xa-note {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  border-radius: 10px;
+}
+.xa-note svg {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+}
+.xa-note.is-error {
+  color: #8c1d33;
+  background: #fbe9ec;
+  border: 1px solid #f0bcc6;
+}
+.xa-note.is-ok {
+  color: #0a5c53;
+  background: #e3f6f2;
+  border: 1px solid #a9e2d8;
+}
+
+.xa-submit {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 50px;
+  margin-top: 4px;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--xa-sheet);
+  background: var(--xa-ink);
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background-color 0.3s var(--xa-ease), transform 0.3s var(--xa-ease);
+}
+.xa-submit:hover {
+  background: #173a5e;
+}
+.xa-submit.is-accent {
+  color: var(--xa-night);
+  background: var(--xa-gate);
+}
+.xa-submit.is-accent:hover {
+  background: #5ee3d1;
+}
+.xa-submit:active {
+  transform: scale(0.985);
+}
+.xa-submit:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+.xa-submit svg {
+  width: 18px;
+  height: 18px;
+  transition: transform 0.3s var(--xa-ease);
+}
+.xa-submit:hover svg {
+  transform: translateX(3px);
+}
+.xa-spin {
+  animation: xa-spin 0.9s linear infinite;
+}
+@keyframes xa-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.xa-switch {
+  margin: 0;
+  font-size: 13.5px;
+  text-align: center;
+  color: var(--xa-ink-2);
+}
+.xa-switch button {
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  color: var(--xa-gate-ink);
+  background: none;
+  border: 0;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.xa :focus-visible {
+  outline: 2px solid var(--xa-gate-ink);
+  outline-offset: 2px;
+}
+
+@media (pointer: coarse) {
+  .xa-tab {
+    min-height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .xa *,
+  .xa *::before,
+  .xa *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}

@@ -133,7 +133,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         ) : (
           <button
             onClick={onOpenAuthModal}
-            className="py-1.5 px-3 bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs rounded-lg shadow-xs flex items-center space-x-1.5 transition-colors"
+            className="py-1.5 px-3 bg-slate-800 hover:bg-slate-900 text-white font-medium text-xs rounded-lg shadow-xs flex items-center space-x-1.5 transition-colors"
           >
             <LogIn className="w-3.5 h-3.5" />
             <span>Giriş / Kayıt Ol</span>

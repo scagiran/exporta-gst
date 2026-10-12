@@ -24,11 +24,15 @@ export const ExPortaLogo: React.FC<ExPortaLogoProps> = ({
     lg: 'text-3xl',
   };
 
+  // The mark keeps its own faces so an app-wide font change never alters it.
+  const markFont = { fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" };
+  const subtitleFont = { fontFamily: "'JetBrains Mono', ui-monospace, monospace" };
+
   // If collapsed icon mode requested (for collapsed sidebar header)
   if (isCollapsedMark) {
     return (
       <div className={`relative inline-flex items-center justify-center w-9 h-9 rounded-xl bg-slate-900 border border-slate-700/80 shadow-sm ${className}`} title="ExPorta B2B">
-        <span className="font-extrabold text-white text-base tracking-tight font-sans">
+        <span className="font-extrabold text-white text-base tracking-tight" style={markFont}>
           Ex
         </span>
         <svg
@@ -44,7 +48,7 @@ export const ExPortaLogo: React.FC<ExPortaLogoProps> = ({
   }
 
   return (
-    <div className={`inline-flex items-start gap-2 font-sans select-none ${className}`}>
+    <div className={`inline-flex items-start gap-2 select-none ${className}`} style={markFont}>
       <div className="relative flex flex-col items-start">
         {/* Brand Name & Arc Container */}
         <div className="relative inline-flex items-center tracking-tight font-extrabold">
@@ -76,9 +80,10 @@ export const ExPortaLogo: React.FC<ExPortaLogoProps> = ({
 
         {showSubtitle && (
           <span
-            className={`text-[8px] font-mono tracking-widest uppercase font-bold mt-1 ${
+            className={`text-[8px] tracking-widest uppercase font-bold mt-1 ${
               variant === 'light' ? 'text-teal-400' : 'text-teal-700'
             }`}
+            style={subtitleFont}
           >
             B2B Dış Ticaret Platformu
           </span>
