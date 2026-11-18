@@ -1,7 +1,12 @@
 import React, { useState } from 'react';
-import { MasterShipment, ShipmentItem, DocType, DocStatus, Customer, Product, CustomField } from '../types/exporta';
-import { DOC_TYPE_NAMES } from '../lib/numbering';
-import { calculateVgmAndWeights } from '../lib/vgm';
+import { MasterShipment, ShipmentItem, DocType, DocStatus, CompanySettings } from '../types/exporta';
+import { useLang } from '../i18n';
+import { unitLabel } from '../i18n/units';
+import { summariseWeights, DEFAULT_WARNING_TOLERANCE_PCT } from '../lib/weights';
+import { shipmentVgmKg } from '../lib/commerce';
+import type { SaveOutcome } from '../lib/saveTypes';
+import { outcomeMessage } from './AppNotice';
+import { IssueList } from './IssueList';
 import {
   Ship,
   FileCheck,
@@ -32,29 +37,34 @@ import {
 
 interface ShipmentDetailViewProps {
   shipment: MasterShipment;
-  customers: Customer[];
-  products: Product[];
-  customFields: CustomField[];
-  onUpdateShipment: (updated: MasterShipment) => void;
+  companySettings: CompanySettings;
+  onUpdateShipment: (updated: MasterShipment) => Promise<SaveOutcome>;
   onBack: () => void;
   onOpenDocEditor: (shipmentId: string, docType: DocType) => void;
   onUpdateDocNotes?: (shipmentId: string, docType: DocType, notes: string) => void;
   onResetDocument?: (shipmentId: string, docType: DocType) => void;
-  onSyncProformaToActual?: (shipmentId: string) => void;
 }
+
+/** Parses a weight field: empty means "not given", anything else must be a non-negative number. */
+const parseKg = (v: string): number | undefined | null => {
+  if (!v.trim()) return undefined;
+  const n = Number(v.replace(',', '.'));
+  return Number.isFinite(n) && n >= 0 ? n : null;
+};
 
 export const ShipmentDetailView: React.FC<ShipmentDetailViewProps> = ({
   shipment,
-  customers,
-  products,
-  customFields,
+  companySettings,
   onUpdateShipment,
   onBack,
   onOpenDocEditor,
   onUpdateDocNotes,
   onResetDocument,
-  onSyncProformaToActual,
 }) => {
+  const { t, lang, num } = useLang();
+  const dt = t.detail;
+  const kg1 = (n: number) => num(n, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  const dp2 = (n: number) => num(n, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const [activeTab, setActiveTab] = useState<'overview' | 'items' | 'actual_loading' | 'vgm' | 'workflow'>('workflow');
   
   // Document notes editing inline state
@@ -64,13 +74,30 @@ export const ShipmentDetailView: React.FC<ShipmentDetailViewProps> = ({
   // Local state for editing actual loading quantities & VGM
   const [itemsData, setItemsData] = useState<ShipmentItem[]>(shipment.items);
   const [actualLoadingEntered, setActualLoadingEntered] = useState<boolean>(shipment.actualLoadingEntered);
-  const [totalVgmKg, setTotalVgmKg] = useState<number>(shipment.totalVgmKg || 0);
   const [actualLoadingDate, setActualLoadingDate] = useState<string>(shipment.actualLoadingDate || new Date().toISOString().split('T')[0]);
+  const kgText = (n?: number) => (n === undefined ? '' : String(n));
+  const [measuredText, setMeasuredText] = useState(kgText(shipment.measuredCargoGrossKg));
+  const [tareText, setTareText] = useState(kgText(shipment.containerTareKg));
+  const [vgmText, setVgmText] = useState(kgText(shipmentVgmKg(shipment)));
+  const [saveMsg, setSaveMsg] = useState<{ tab: string; text: string; ok: boolean } | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const [hasChanges, setHasChanges] = useState<boolean>(false);
 
-  // Compute VGM and weights dynamically using Product Master defaults and Actual VGM
-  const vgmResult = calculateVgmAndWeights(itemsData, actualLoadingEntered, totalVgmKg);
+  // Weights for the quantities actually loaded (ordered ones until the loading is entered).
+  const measured = parseKg(measuredText);
+  const tare = parseKg(tareText);
+  const vgm = parseKg(vgmText);
+  const weightsInvalid = measured === null || tare === null || vgm === null;
+  const tolerance = companySettings.vgmWarningTolerancePct ?? DEFAULT_WARNING_TOLERANCE_PCT;
+  const loadedQty = (it: ShipmentItem) => (actualLoadingEntered && it.actualLoadedQty !== undefined ? it.actualLoadedQty : it.orderedQty);
+  const weights = summariseWeights({
+    lines: itemsData.map((it) => ({ qty: loadedQty(it), netWeightKg: it.netWeightKg, grossWeightKg: it.grossWeightKg })),
+    measuredCargoGrossKg: measured ?? undefined,
+    containerTareKg: tare ?? undefined,
+    declaredVgmKg: vgm ?? undefined,
+    warningTolerancePct: tolerance,
+  });
 
   // Handle actual loaded quantity change
   const handleActualQtyChange = (itemId: string, newQty: number) => {
@@ -80,80 +107,78 @@ export const ShipmentDetailView: React.FC<ShipmentDetailViewProps> = ({
     setHasChanges(true);
   };
 
-  // Save Actual Loading & Master changes
-  const handleSaveActualLoading = () => {
-    const updatedDocs = { ...shipment.documents };
-    
-    // Update Actual Loading & Commercial Invoice & Packing List statuses
-    updatedDocs.actual_loading = {
-      ...updatedDocs.actual_loading,
-      status: 'onaylandi' as DocStatus,
-      updatedAt: new Date().toISOString().split('T')[0],
-    };
-
-    if (updatedDocs.commercial_invoice.status === 'eksik' || updatedDocs.commercial_invoice.status === 'taslak') {
-      updatedDocs.commercial_invoice.status = 'hazir';
+  // Save the actual loading. Loading documents become ready to check; nothing is
+  // approved automatically, and approved documents keep their frozen content.
+  const handleSaveActualLoading = async () => {
+    const day = new Date().toISOString().split('T')[0];
+    const docs = { ...shipment.documents };
+    for (const dt of ['actual_loading', 'commercial_invoice', 'packing_list', 'shipping_instruction'] as DocType[]) {
+      if (docs[dt].status === 'eksik') docs[dt] = { ...docs[dt], status: 'hazir', updatedAt: day };
     }
-    if (updatedDocs.packing_list.status === 'eksik' || updatedDocs.packing_list.status === 'taslak') {
-      updatedDocs.packing_list.status = 'hazir';
-    }
-
-    const updatedItems = vgmResult.items.map((it) => ({
-      id: it.id,
-      productId: it.productId,
-      productCode: it.productCode,
-      productName: it.productName,
-      hsCode: it.hsCode,
-      unit: it.unit,
-      orderedQty: it.orderedQty,
-      actualLoadedQty: it.actualLoadedQty,
-      unitPrice: it.unitPrice,
-      currency: it.currency,
-      netWeightKg: it.netWeightKg,
-      grossWeightKg: it.grossWeightKg,
-      vgmWeightKg: it.lineCalculatedGrossWeightKg,
-      customNotes: it.customNotes,
-    }));
-
+    const updatedItems = itemsData.map(({ vgmWeightKg: _legacy, ...it }) => ({ ...it, actualLoadedQty: it.actualLoadedQty ?? it.orderedQty }));
     const updated: MasterShipment = {
       ...shipment,
       items: updatedItems,
       actualLoadingEntered: true,
       actualLoadingDate,
-      totalVgmKg: totalVgmKg > 0 ? totalVgmKg : undefined,
-      documents: updatedDocs,
-      updatedAt: new Date().toISOString().split('T')[0],
+      documents: docs,
     };
-
+    setBusy(true);
+    const outcome = await onUpdateShipment(updated);
+    setBusy(false);
     setItemsData(updatedItems);
     setActualLoadingEntered(true);
-    onUpdateShipment(updated);
-    setHasChanges(false);
-    alert('Actual Loading (Gerçek Yükleme) verileri kaydedildi! Commercial Invoice ve Packing List güncellendi.');
+    if (outcome !== 'failed') setHasChanges(false);
+    setSaveMsg({ tab: 'actual_loading', ok: outcome !== 'failed', text: outcome === 'saved' ? dt.savedActual : outcomeMessage(t, outcome) });
+  };
+
+  const handleSaveWeights = async () => {
+    if (weightsInvalid) {
+      setSaveMsg({ tab: 'vgm', ok: false, text: t.weights.invalid });
+      return;
+    }
+    setBusy(true);
+    const outcome = await onUpdateShipment({
+      ...shipment,
+      measuredCargoGrossKg: measured ?? undefined,
+      containerTareKg: tare ?? undefined,
+      vgmKg: vgm ?? undefined,
+      totalVgmKg: undefined,
+    });
+    setBusy(false);
+    setSaveMsg({ tab: 'vgm', ok: outcome !== 'failed', text: outcomeMessage(t, outcome) });
   };
 
   // 7 Workflow Docs
-  const workflowDocOrder: { type: DocType; name: string; desc: string; step: number }[] = [
-    { type: 'quotation', name: '1. Quotation (Teklif)', desc: 'İlk fiyat ve ticari koşullar teklifi', step: 1 },
-    { type: 'proforma', name: '2. Proforma Invoice', desc: 'Müşteri onaylı ön fatura ve sipariş akdi', step: 2 },
-    { type: 'sales_order', name: '3. Sales Order (Satış Siparişi)', desc: 'İç üretim ve depo hazırlık emri', step: 3 },
-    { type: 'actual_loading', name: '4. Actual Loading (Gerçek Yükleme)', desc: 'Fiziki yüklenen miktar ve kantar doğrulaması', step: 4 },
-    { type: 'commercial_invoice', name: '5. Commercial Invoice (Ticari Fatura)', desc: 'Gümrük ve ödeme için resmi fatura', step: 5 },
-    { type: 'packing_list', name: '6. Packing List (Çeki Listesi)', desc: 'Paket, kap ve kantar/VGM ağırlık dökümü', step: 6 },
-    { type: 'shipping_instruction', name: '7. Shipping Instruction (Yükleme Talimatı)', desc: 'Forwarder/Acente konşimento talimatı', step: 7 },
-  ];
+  const ORDER: DocType[] = ['quotation', 'proforma', 'sales_order', 'actual_loading', 'commercial_invoice', 'packing_list', 'shipping_instruction'];
+  const workflowDocOrder: { type: DocType; name: string; desc: string; step: number }[] = ORDER.map((type, i) => ({
+    type,
+    name: dt.steps[type].name,
+    desc: dt.steps[type].desc,
+    step: i + 1,
+  }));
+  /** Which question heads each step's guide. */
+  const QUESTION: Record<DocType, 'qNow' | 'qNext' | 'qMissing'> = {
+    quotation: 'qNow',
+    proforma: 'qNext',
+    sales_order: 'qMissing',
+    actual_loading: 'qNow',
+    commercial_invoice: 'qNext',
+    packing_list: 'qMissing',
+    shipping_instruction: 'qNow',
+  };
 
   const getStatusBadge = (status: DocStatus) => {
     switch (status) {
       case 'onaylandi':
-        return <span className="px-2.5 py-1 rounded bg-emerald-100 text-emerald-800 text-xs font-bold border border-emerald-200">✓ Onaylandı</span>;
+        return <span className="px-2.5 py-1 rounded bg-emerald-100 text-emerald-800 text-xs font-bold border border-emerald-200">✓ {t.docStatus.onaylandi}</span>;
       case 'hazir':
-        return <span className="px-2.5 py-1 rounded bg-teal-100 text-teal-800 text-xs font-bold border border-teal-200">● Hazır</span>;
+        return <span className="px-2.5 py-1 rounded bg-teal-100 text-teal-800 text-xs font-bold border border-teal-200">● {t.docStatus.hazir}</span>;
       case 'taslak':
-        return <span className="px-2.5 py-1 rounded bg-slate-100 text-slate-700 text-xs font-medium border border-slate-200"> Taslak</span>;
+        return <span className="px-2.5 py-1 rounded bg-slate-100 text-slate-700 text-xs font-medium border border-slate-200"> {t.docStatus.taslak}</span>;
       case 'eksik':
       default:
-        return <span className="px-2.5 py-1 rounded bg-amber-100 text-amber-800 text-xs font-bold border border-amber-200">⚠ Eksik</span>;
+        return <span className="px-2.5 py-1 rounded bg-amber-100 text-amber-800 text-xs font-bold border border-amber-200">⚠ {t.docStatus.eksik}</span>;
     }
   };
 
@@ -169,6 +194,8 @@ export const ShipmentDetailView: React.FC<ShipmentDetailViewProps> = ({
         <div className="flex items-center space-x-4">
           <button
             onClick={onBack}
+            title={dt.back}
+            aria-label={dt.back}
             className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -181,7 +208,7 @@ export const ShipmentDetailView: React.FC<ShipmentDetailViewProps> = ({
               <span className="text-xs text-slate-400">|</span>
               <span className="text-xs font-semibold text-slate-700">{shipment.customer.companyName} ({shipment.customer.country})</span>
             </div>
-            <h2 className="text-lg font-bold text-slate-900 mt-0.5">Master Sevkiyat Dosyası & Belge Workflow</h2>
+            <h2 className="text-lg font-bold text-slate-900 mt-0.5">{dt.title}</h2>
           </div>
         </div>
 
@@ -190,8 +217,8 @@ export const ShipmentDetailView: React.FC<ShipmentDetailViewProps> = ({
           <div className="bg-amber-50 border border-amber-300 rounded-lg p-3 flex items-center space-x-3 text-xs text-amber-800 max-w-md">
             <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
             <div>
-              <strong className="block font-bold">Gerçek Yükleme Girilmedi!</strong>
-              <span>Belge Proforma/Sales Order sipariş miktarlarını kullanacaktır.</span>
+              <strong className="block font-bold">{dt.noActualTitle}</strong>
+              <span>{dt.noActualBody}</span>
             </div>
           </div>
         )}
@@ -206,7 +233,7 @@ export const ShipmentDetailView: React.FC<ShipmentDetailViewProps> = ({
           }`}
         >
           <FileCheck className="w-4 h-4 text-teal-600" />
-          <span>7 Aşamalı Belge Workflow</span>
+          <span>{dt.tabWorkflow}</span>
         </button>
 
         <button
@@ -216,7 +243,7 @@ export const ShipmentDetailView: React.FC<ShipmentDetailViewProps> = ({
           }`}
         >
           <Truck className="w-4 h-4 text-slate-600" />
-          <span>Actual Loading (Gerçek Yükleme)</span>
+          <span>{dt.tabActual}</span>
           {!actualLoadingEntered && (
             <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
           )}
@@ -229,7 +256,7 @@ export const ShipmentDetailView: React.FC<ShipmentDetailViewProps> = ({
           }`}
         >
           <Scale className="w-4 h-4 text-slate-600" />
-          <span>VGM & Kantar Ağırlığı</span>
+          <span>{t.weights.title}</span>
         </button>
 
         <button
@@ -239,7 +266,7 @@ export const ShipmentDetailView: React.FC<ShipmentDetailViewProps> = ({
           }`}
         >
           <Package className="w-4 h-4 text-slate-600" />
-          <span>Sipariş Kalemleri ({shipment.items.length})</span>
+          <span>{dt.tabItems(shipment.items.length)}</span>
         </button>
 
         <button
@@ -249,7 +276,7 @@ export const ShipmentDetailView: React.FC<ShipmentDetailViewProps> = ({
           }`}
         >
           <Info className="w-4 h-4 text-slate-600" />
-          <span>Lojistik & Ödeme Koşulları</span>
+          <span>{dt.tabOverview}</span>
         </button>
       </div>
 
@@ -257,9 +284,9 @@ export const ShipmentDetailView: React.FC<ShipmentDetailViewProps> = ({
       {activeTab === 'workflow' && (
         <div className="space-y-6">
           <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-2xs">
-            <h3 className="font-bold text-slate-900 text-sm mb-1">Dış Ticaret Belge İlerleme Akışı</h3>
+            <h3 className="font-bold text-slate-900 text-sm mb-1">{dt.flowTitle}</h3>
             <p className="text-xs text-slate-500">
-              Bu sevkiyata ait 7 temel belgenin canlı durumu. Her belgenin tasarımı 3 farklı şablon ile canlı önizlenebilir.
+              {dt.flowLead}
             </p>
           </div>
 
@@ -286,7 +313,7 @@ export const ShipmentDetailView: React.FC<ShipmentDetailViewProps> = ({
                     </div>
 
                     <div className="p-3 bg-slate-50 rounded-lg border border-slate-100 flex items-center justify-between text-xs font-mono">
-                      <span className="text-slate-500">Belge No:</span>
+                      <span className="text-slate-500">{dt.docNo}</span>
                       <strong className="text-slate-800">{docInfo.docNumber}</strong>
                     </div>
 
@@ -294,44 +321,12 @@ export const ShipmentDetailView: React.FC<ShipmentDetailViewProps> = ({
                     <div className="bg-teal-50/60 border border-teal-200/80 rounded-lg p-3 space-y-1.5 text-xs">
                       <div className="font-bold text-teal-900 text-[11px] uppercase tracking-wider flex items-center gap-1">
                         <HelpCircle className="w-3.5 h-3.5 text-teal-700" />
-                        <span>Adım Rehberi</span>
+                        <span>{dt.guide}</span>
                       </div>
 
-                      {docItem.type === 'quotation' && (
-                        <p className="text-teal-950 text-[11px]">
-                          <strong>Şimdi ne yapmalısınız?</strong> Müşterinize teklif metnini iletin ve teyit bekleyin.
-                        </p>
-                      )}
-                      {docItem.type === 'proforma' && (
-                        <p className="text-teal-950 text-[11px]">
-                          <strong>Sonraki adım nedir?</strong> Proforma onaylandıktan sonra banka akreditif/avans ödemesini kontrol edin.
-                        </p>
-                      )}
-                      {docItem.type === 'sales_order' && (
-                        <p className="text-teal-950 text-[11px]">
-                          <strong>Eksik olan nedir?</strong> Depoya paketleme ve hazırlık emrini iletin.
-                        </p>
-                      )}
-                      {docItem.type === 'actual_loading' && (
-                        <p className="text-teal-950 text-[11px]">
-                          <strong>Şimdi ne yapmalısınız?</strong> Konteyner/kamyon yüklendikten sonra fiziki adet ve kantar kg girin.
-                        </p>
-                      )}
-                      {docItem.type === 'commercial_invoice' && (
-                        <p className="text-teal-950 text-[11px]">
-                          <strong>Sonraki adım nedir?</strong> Gerçek yüklenen adetlere göre gümrük faturasını onaylayın.
-                        </p>
-                      )}
-                      {docItem.type === 'packing_list' && (
-                        <p className="text-teal-950 text-[11px]">
-                          <strong>Eksik olan nedir?</strong> VGM/kantar tartı sonucuna göre net/brüt kap ağırlıklarını kontrol edin.
-                        </p>
-                      )}
-                      {docItem.type === 'shipping_instruction' && (
-                        <p className="text-teal-950 text-[11px]">
-                          <strong>Şimdi ne yapmalısınız?</strong> Forwarder/acente firmasına konşimento (B/L) talimatını gönderin.
-                        </p>
-                      )}
+                      <p className="text-teal-950 text-[11px]">
+                        <strong>{dt[QUESTION[docItem.type]]}</strong> {dt.hints[docItem.type]}
+                      </p>
                     </div>
 
                     {/* Document Note Inline Management (Edit / Delete / Save) */}
@@ -339,7 +334,7 @@ export const ShipmentDetailView: React.FC<ShipmentDetailViewProps> = ({
                       <div className="flex justify-between items-center">
                         <span className="font-bold text-amber-900 text-[11px] uppercase tracking-wider flex items-center gap-1">
                           <StickyNote className="w-3.5 h-3.5 text-amber-700" />
-                          <span>Belge Notu</span>
+                          <span>{dt.docNote}</span>
                         </span>
 
                         {editingNotesDocType !== docItem.type && (
@@ -353,7 +348,7 @@ export const ShipmentDetailView: React.FC<ShipmentDetailViewProps> = ({
                               className="text-[10px] font-bold text-amber-900 hover:bg-amber-200 px-2 py-0.5 bg-amber-100 rounded border border-amber-300 transition-colors flex items-center gap-1"
                             >
                               <Edit className="w-3 h-3" />
-                              <span>{docInfo.notes ? 'Düzenle' : '+ Not Ekle'}</span>
+                              <span>{docInfo.notes ? dt.editNote : dt.addNote}</span>
                             </button>
                             {docInfo.notes && (
                               <button
@@ -364,10 +359,10 @@ export const ShipmentDetailView: React.FC<ShipmentDetailViewProps> = ({
                                   }
                                 }}
                                 className="text-[10px] font-bold text-red-700 hover:bg-red-100 px-1.5 py-0.5 bg-red-50 rounded border border-red-200 transition-colors flex items-center gap-1"
-                                title="Notu Sil"
+                                title={dt.deleteNote}
                               >
                                 <Trash2 className="w-3 h-3" />
-                                <span>Sil</span>
+                                <span>{dt.del}</span>
                               </button>
                             )}
                           </div>
@@ -380,7 +375,7 @@ export const ShipmentDetailView: React.FC<ShipmentDetailViewProps> = ({
                             value={tempDocNotes}
                             onChange={(e) => setTempDocNotes(e.target.value)}
                             rows={3}
-                            placeholder="Belgeye özel not veya açıklama yazın..."
+                            placeholder={dt.notePlaceholder}
                             className="w-full bg-white border border-amber-300 rounded p-2 text-xs text-slate-800 focus:outline-none focus:border-amber-600 leading-relaxed font-sans"
                           />
                           <div className="flex justify-end space-x-2">
@@ -389,7 +384,7 @@ export const ShipmentDetailView: React.FC<ShipmentDetailViewProps> = ({
                               onClick={() => setEditingNotesDocType(null)}
                               className="px-2.5 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold text-[11px] rounded"
                             >
-                              İptal
+                              {dt.cancel}
                             </button>
                             <button
                               type="button"
@@ -402,13 +397,13 @@ export const ShipmentDetailView: React.FC<ShipmentDetailViewProps> = ({
                               className="px-3 py-1 bg-amber-600 hover:bg-amber-500 text-white font-bold text-[11px] rounded flex items-center gap-1 shadow-2xs"
                             >
                               <Save className="w-3 h-3" />
-                              <span>Kaydet</span>
+                              <span>{dt.save}</span>
                             </button>
                           </div>
                         </div>
                       ) : (
                         <p className="text-slate-800 text-[11px] whitespace-pre-line leading-relaxed italic">
-                          {docInfo.notes ? `"${docInfo.notes}"` : 'Henüz özel not eklenmedi.'}
+                          {docInfo.notes ? `"${docInfo.notes}"` : dt.noNote}
                         </p>
                       )}
                     </div>
@@ -420,18 +415,18 @@ export const ShipmentDetailView: React.FC<ShipmentDetailViewProps> = ({
                       className="flex-1 py-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-lg flex items-center justify-center space-x-1.5 transition-colors shadow-2xs"
                     >
                       <Eye className="w-3.5 h-3.5" />
-                      <span>Düzenle & Önizle</span>
+                      <span>{dt.editPreview}</span>
                     </button>
 
                     {onResetDocument && (
                       <button
                         onClick={() => {
-                          if (window.confirm(`${DOC_TYPE_NAMES[docItem.type]} belgesinin notlarını ve ayarlarını sıfırlamak istiyor musunuz?`)) {
+                          if (window.confirm(t.resetConfirm(t.docNames[docItem.type]))) {
                             onResetDocument(shipment.id, docItem.type);
                           }
                         }}
                         className="py-2 px-2.5 bg-slate-100 hover:bg-red-50 text-slate-600 hover:text-red-600 font-semibold text-xs rounded-lg border border-slate-200 transition-colors"
-                        title="Belge notlarını ve ayarlarını sıfırla / sil"
+                        title={dt.resetTitle}
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -440,7 +435,7 @@ export const ShipmentDetailView: React.FC<ShipmentDetailViewProps> = ({
                     <button
                       onClick={() => onOpenDocEditor(shipment.id, docItem.type)}
                       className="py-2 px-3 bg-teal-600 hover:bg-teal-500 text-white font-semibold text-xs rounded-lg flex items-center justify-center space-x-1 transition-colors shadow-2xs"
-                      title="PDF İndir"
+                      title={dt.pdfTitle}
                     >
                       <Download className="w-3.5 h-3.5" />
                       <span>PDF</span>
@@ -459,15 +454,15 @@ export const ShipmentDetailView: React.FC<ShipmentDetailViewProps> = ({
           <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-2xs space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <h3 className="font-bold text-slate-900 text-sm">Actual Loading (Gerçek Yükleme Adetleri)</h3>
+                <h3 className="font-bold text-slate-900 text-sm">{dt.actualTitle}</h3>
                 <p className="text-xs text-slate-500">
-                  Fabrikada veya limanda gerçeğe dönüşen fiziki yükleme verileri. Commercial Invoice ve Packing List bu miktarlara göre türetilir.
+                  {dt.actualLead}
                 </p>
               </div>
 
               <div className="flex items-center space-x-3">
                 <div>
-                  <label className="text-[11px] font-semibold text-slate-600 block">Yükleme Tarihi:</label>
+                  <label className="text-[11px] font-semibold text-slate-600 block">{dt.loadingDate}</label>
                   <input
                     type="date"
                     value={actualLoadingDate}
@@ -476,19 +471,6 @@ export const ShipmentDetailView: React.FC<ShipmentDetailViewProps> = ({
                       setHasChanges(true);
                     }}
                     className="border border-slate-300 rounded-md px-2 py-1 text-xs"
-                  />
-                </div>
-                <div>
-                  <label className="text-[11px] font-semibold text-slate-600 block">Actual VGM / Kantar (kg):</label>
-                  <input
-                    type="number"
-                    value={totalVgmKg || ''}
-                    onChange={(e) => {
-                      setTotalVgmKg(parseFloat(e.target.value) || 0);
-                      setHasChanges(true);
-                    }}
-                    placeholder="Örn: 1080"
-                    className="border border-slate-300 rounded-md px-2 py-1 text-xs font-mono font-bold w-28"
                   />
                 </div>
                 <div className="flex items-center space-x-2 pt-3 sm:pt-0">
@@ -503,42 +485,46 @@ export const ShipmentDetailView: React.FC<ShipmentDetailViewProps> = ({
                       );
                       setActualLoadingEntered(true);
                       setHasChanges(true);
-                      if (onSyncProformaToActual) {
-                        onSyncProformaToActual(shipment.id);
-                      }
                     }}
                     className="py-2 px-3 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs rounded-lg shadow-xs flex items-center space-x-1.5 transition-colors"
-                    title="Sevkiyat günü proforma adetlerini fiili yüklenen adetlere kopyalar"
+                    title={dt.syncTitle}
                   >
                     <Zap className="w-3.5 h-3.5 fill-current" />
-                    <span>⚡ Proforma Adetlerini Eşitle</span>
+                    <span>{dt.sync}</span>
                   </button>
 
                   <button
                     onClick={handleSaveActualLoading}
+                    disabled={busy}
                     className="py-2 px-4 bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs rounded-lg shadow-xs flex items-center space-x-1.5"
                   >
                     <Save className="w-4 h-4" />
-                    <span>Gerçek Yüklemeyi Kaydet</span>
+                    <span>{dt.saveActual}</span>
                   </button>
                 </div>
               </div>
             </div>
 
+            {saveMsg?.tab === 'actual_loading' && (
+              <p role="status" className={`text-xs font-semibold ${saveMsg.ok ? 'text-emerald-700' : 'text-red-700'}`}>
+                {saveMsg.text}
+              </p>
+            )}
+
             {/* Quantity Difference Summary */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-3 border-t border-slate-100">
               <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
-                <span className="text-[11px] text-slate-500 block">Toplam Sipariş Edilen</span>
-                <strong className="text-base font-mono text-slate-800">{totalOrderedQty} Birim</strong>
+                <span className="text-[11px] text-slate-500 block">{dt.totalOrdered}</span>
+                <strong className="text-base font-mono text-slate-800">{num(totalOrderedQty)} {dt.units}</strong>
               </div>
               <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
-                <span className="text-[11px] text-slate-500 block">Gerçek Yüklenen Adet</span>
-                <strong className="text-base font-mono text-teal-800">{totalActualQty} Birim</strong>
+                <span className="text-[11px] text-slate-500 block">{dt.totalLoaded}</span>
+                <strong className="text-base font-mono text-teal-800">{num(totalActualQty)} {dt.units}</strong>
               </div>
               <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
-                <span className="text-[11px] text-slate-500 block">Yükleme Farkı (Variance)</span>
+                <span className="text-[11px] text-slate-500 block">{dt.variance}</span>
                 <strong className={`text-base font-mono ${qtyDiff < 0 ? 'text-red-600' : qtyDiff > 0 ? 'text-teal-600' : 'text-slate-700'}`}>
-                  {qtyDiff > 0 ? `+${qtyDiff}` : qtyDiff} Birim
+                  {qtyDiff > 0 ? `+${num(qtyDiff)}` : num(qtyDiff)} {dt.units}
                 </strong>
               </div>
             </div>
@@ -547,19 +533,19 @@ export const ShipmentDetailView: React.FC<ShipmentDetailViewProps> = ({
           {/* Items Actual Loading Table */}
           <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
             <div className="p-4 bg-slate-50 border-b border-slate-200 font-bold text-xs text-slate-800">
-              Sipariş Ürünleri Fiziki Yükleme Tablosu
+              {dt.tableTitle}
             </div>
             <table className="w-full text-xs text-left">
               <thead className="bg-slate-100 text-slate-700 font-semibold uppercase text-[10px]">
                 <tr>
-                  <th className="py-3 px-4">Görsel</th>
-                  <th className="py-3 px-4">Ürün Kodu</th>
-                  <th className="py-3 px-4">Ürün Adı</th>
-                  <th className="py-3 px-4 text-center">Sipariş Miktarı</th>
-                  <th className="py-3 px-4 text-center">Gerçek Yükleme (Actual)</th>
-                  <th className="py-3 px-4 text-center">Fark</th>
-                  <th className="py-3 px-4 text-right">Birim Fiyat</th>
-                  <th className="py-3 px-4 text-right">Fatura Tutarı</th>
+                  <th className="py-3 px-4">{dt.colImage}</th>
+                  <th className="py-3 px-4">{dt.colCode}</th>
+                  <th className="py-3 px-4">{dt.colName}</th>
+                  <th className="py-3 px-4 text-center">{dt.colOrdered}</th>
+                  <th className="py-3 px-4 text-center">{dt.colActual}</th>
+                  <th className="py-3 px-4 text-center">{dt.colDiff}</th>
+                  <th className="py-3 px-4 text-right">{dt.colPrice}</th>
+                  <th className="py-3 px-4 text-right">{dt.colAmount}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -582,7 +568,7 @@ export const ShipmentDetailView: React.FC<ShipmentDetailViewProps> = ({
                       <td className="py-3 px-4 font-mono font-bold text-teal-800">{item.productCode}</td>
                       <td className="py-3 px-4 font-medium text-slate-900">{item.productName}</td>
                       <td className="py-3 px-4 text-center font-mono font-semibold text-slate-700">
-                        {item.orderedQty} {item.unit}
+                        {num(item.orderedQty)} {unitLabel(item.unit, lang, item.orderedQty)}
                       </td>
                       <td className="py-3 px-4 text-center">
                         <input
@@ -602,10 +588,10 @@ export const ShipmentDetailView: React.FC<ShipmentDetailViewProps> = ({
                         )}
                       </td>
                       <td className="py-3 px-4 text-right font-mono text-slate-700">
-                        {item.unitPrice.toFixed(2)} {item.currency}
+                        {dp2(item.unitPrice)} {item.currency}
                       </td>
                       <td className="py-3 px-4 text-right font-mono font-bold text-slate-900">
-                        {itemTotal.toFixed(2)} {item.currency}
+                        {dp2(itemTotal)} {item.currency}
                       </td>
                     </tr>
                   );
@@ -616,99 +602,103 @@ export const ShipmentDetailView: React.FC<ShipmentDetailViewProps> = ({
         </div>
       )}
 
-      {/* TAB 3: VGM & KANTAR AĞIRLIĞI */}
+      {/* TAB 3: WEIGHTS AND VGM. Cargo gross and VGM are separate figures. */}
       {activeTab === 'vgm' && (
         <div className="space-y-6">
-          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-2xs space-y-4">
+          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-2xs space-y-4 text-xs">
             <div>
-              <h3 className="font-bold text-slate-900 text-sm">VGM (Verified Gross Mass) & Kantar Ağırlığı</h3>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Kantar fişinden alınan gerçek toplam brüt ağırlık verisini girin. Sistem, Packing List brüt ağırlıklarını varsayılan ürün oranlarına göre otomatik oluşturur.
-              </p>
+              <h3 className="font-bold text-slate-900 text-sm">{t.weights.title}</h3>
+              <p className="text-slate-500 mt-0.5 leading-relaxed">{t.weights.lead}</p>
             </div>
 
-            <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
-              <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                <div className="space-y-1 shrink-0">
-                  <label className="text-xs font-bold text-slate-800 block">Actual VGM / Kantar Ağırlığı (kg):</label>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {[
+                { id: 'w-measured', label: t.weights.measuredCargo, value: measuredText, set: setMeasuredText, bad: measured === null },
+                { id: 'w-tare', label: t.weights.tare, value: tareText, set: setTareText, bad: tare === null },
+                { id: 'w-vgm', label: t.weights.vgm, value: vgmText, set: setVgmText, bad: vgm === null },
+              ].map((f) => (
+                <div key={f.id}>
+                  <label htmlFor={f.id} className="block font-semibold text-slate-700 mb-1">
+                    {f.label} (kg)
+                  </label>
                   <input
-                    type="number"
-                    value={totalVgmKg || ''}
-                    onChange={(e) => {
-                      const val = parseFloat(e.target.value) || 0;
-                      setTotalVgmKg(val);
-                      setHasChanges(true);
-                    }}
-                    placeholder="Örn: 1080"
-                    className="border border-slate-300 rounded-lg p-2 font-mono font-bold text-sm w-48 focus:ring-2 focus:ring-teal-500 bg-white"
+                    id={f.id}
+                    inputMode="decimal"
+                    value={f.value}
+                    onChange={(e) => f.set(e.target.value)}
+                    aria-invalid={f.bad}
+                    className={`w-full border rounded-lg p-2 font-mono font-bold ${f.bad ? 'border-red-500' : 'border-slate-300'}`}
                   />
                 </div>
-
-                <div className="flex-1 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-                  <div className="p-2.5 bg-white rounded-lg border border-slate-200 shadow-2xs">
-                    <span className="text-[10px] text-slate-500 block">Varsayılan Net Ağırlık</span>
-                    <strong className="font-mono text-slate-800 text-sm">{vgmResult.totalNetWeightKg.toLocaleString('tr-TR')} kg</strong>
-                  </div>
-                  <div className="p-2.5 bg-white rounded-lg border border-slate-200 shadow-2xs">
-                    <span className="text-[10px] text-slate-500 block">Varsayılan Brüt Ağırlık</span>
-                    <strong className="font-mono text-slate-800 text-sm">{vgmResult.totalDefaultGrossWeightKg.toLocaleString('tr-TR')} kg</strong>
-                  </div>
-                  <div className="p-2.5 bg-white rounded-lg border border-slate-200 shadow-2xs">
-                    <span className="text-[10px] text-slate-500 block">Actual VGM</span>
-                    <strong className="font-mono text-teal-800 text-sm">
-                      {vgmResult.actualVgmKg ? `${vgmResult.actualVgmKg.toLocaleString('tr-TR')} kg` : '-'}
-                    </strong>
-                  </div>
-                  <div className="p-2.5 bg-white rounded-lg border border-slate-200 shadow-2xs">
-                    <span className="text-[10px] text-slate-500 block">Kantar Farkı</span>
-                    <strong className={`font-mono text-sm ${vgmResult.differenceKg > 0 ? 'text-amber-700' : vgmResult.differenceKg < 0 ? 'text-blue-700' : 'text-slate-700'}`}>
-                      {vgmResult.differenceKg > 0 ? `+${vgmResult.differenceKg.toLocaleString('tr-TR')}` : vgmResult.differenceKg.toLocaleString('tr-TR')} kg
-                    </strong>
-                  </div>
-                </div>
-              </div>
-
-              {/* VGM Operational Rule Tolerance Warning (+5%) */}
-              {vgmResult.isToleranceExceeded && vgmResult.toleranceWarning && (
-                <div className="p-3 bg-red-50 border border-red-300 rounded-lg text-red-800 text-xs flex items-center space-x-2 font-semibold">
-                  <AlertTriangle className="w-5 h-5 text-red-600 shrink-0" />
-                  <span>{vgmResult.toleranceWarning}</span>
-                </div>
-              )}
+              ))}
             </div>
+
+            <dl className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {[
+                [t.weights.net, `${kg1(weights.totalNetKg)} kg`],
+                [t.weights.calcCargo, `${kg1(weights.calculatedCargoGrossKg)} kg`],
+                [t.weights.measuredCargo, weights.measuredCargoGrossKg !== undefined ? `${kg1(weights.measuredCargoGrossKg)} kg` : '—'],
+                [t.weights.expectedVgm, weights.expectedVgmKg !== undefined ? `${kg1(weights.expectedVgmKg)} kg` : '—'],
+              ].map(([k, v]) => (
+                <div key={k} className="p-2.5 bg-slate-50 rounded-lg border border-slate-200">
+                  <dt className="text-[10px] text-slate-500">{k}</dt>
+                  <dd className="font-mono font-bold text-slate-800 text-sm">{v}</dd>
+                </div>
+              ))}
+            </dl>
+
+            <IssueList issues={weights.issues.map((i) => ('line' in i ? { ...i, line: i.line } : i))} />
+
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-[11px] text-slate-500">{t.weights.tolNote(num(tolerance))}</p>
+              <button
+                type="button"
+                onClick={handleSaveWeights}
+                disabled={busy}
+                className="py-2 px-4 bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs rounded-lg shadow-xs flex items-center gap-1.5 disabled:opacity-60"
+              >
+                <Save className="w-4 h-4" aria-hidden="true" />
+                <span>{t.weights.save}</span>
+              </button>
+            </div>
+            {saveMsg?.tab === 'vgm' && (
+              <p role="status" className={`text-xs font-semibold ${saveMsg.ok ? 'text-emerald-700' : 'text-red-700'}`}>
+                {saveMsg.text}
+              </p>
+            )}
           </div>
 
           <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
-            <div className="p-3.5 bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-800 flex justify-between items-center">
-              <span>Packing List Brüt Ağırlık Dökümü</span>
-              <span className="text-[11px] text-slate-500 font-normal">Nihai kap brüt ağırlıkları kantar farkına göre dengelenmiştir.</span>
+            <div className="p-3.5 bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-800 flex flex-wrap gap-2 justify-between items-center">
+              <span>{t.weights.tableTitle}</span>
+              <span className="text-[11px] text-slate-500 font-normal">{t.weights.tableLead}</span>
             </div>
-            <table className="w-full text-xs text-left">
-              <thead className="bg-slate-100 text-slate-700 font-semibold uppercase text-[10px]">
-                <tr>
-                  <th className="py-3 px-4">Ürün Kodu</th>
-                  <th className="py-3 px-4">Ürün Adı</th>
-                  <th className="py-3 px-4 text-center">Yüklenen Miktar</th>
-                  <th className="py-3 px-4 text-right">Net Ağırlık (kg)</th>
-                  <th className="py-3 px-4 text-right">Varsayılan Brüt (kg)</th>
-                  <th className="py-3 px-4 text-right">Packing List Brüt (VGM kg)</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {vgmResult.items.map((item) => (
-                  <tr key={item.id} className="hover:bg-slate-50">
-                    <td className="py-3 px-4 font-mono font-bold text-teal-800">{item.productCode}</td>
-                    <td className="py-3 px-4 font-medium text-slate-900">{item.productName}</td>
-                    <td className="py-3 px-4 text-center font-mono font-semibold">{item.activeQty} {item.unit}</td>
-                    <td className="py-3 px-4 text-right font-mono text-slate-600">{item.lineNetWeightKg.toFixed(1)} kg</td>
-                    <td className="py-3 px-4 text-right font-mono text-slate-600">{item.lineDefaultGrossWeightKg.toFixed(1)} kg</td>
-                    <td className="py-3 px-4 text-right font-mono font-extrabold text-teal-800 text-sm">
-                      {item.lineCalculatedGrossWeightKg.toFixed(1)} kg
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-left">
+                <thead className="bg-slate-100 text-slate-700 font-semibold uppercase text-[10px]">
+                  <tr>
+                    <th className="py-3 px-4">{dt.colCode}</th>
+                    <th className="py-3 px-4">{dt.colName}</th>
+                    <th className="py-3 px-4 text-center">{t.weights.colLoaded}</th>
+                    <th className="py-3 px-4 text-right">{t.weights.colNet}</th>
+                    <th className="py-3 px-4 text-right">{t.weights.colGross}</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {itemsData.map((item, i) => (
+                    <tr key={item.id} className="hover:bg-slate-50">
+                      <td className="py-3 px-4 font-mono font-bold text-teal-800">{item.productCode}</td>
+                      <td className="py-3 px-4 font-medium text-slate-900">{item.productName}</td>
+                      <td className="py-3 px-4 text-center font-mono font-semibold">
+                        {num(loadedQty(item))} {unitLabel(item.unit, lang, loadedQty(item))}
+                      </td>
+                      <td className="py-3 px-4 text-right font-mono text-slate-600">{kg1(weights.lineNetKg[i])} kg</td>
+                      <td className="py-3 px-4 text-right font-mono font-extrabold text-teal-800">{kg1(weights.lineCargoGrossKg[i])} kg</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
@@ -716,17 +706,17 @@ export const ShipmentDetailView: React.FC<ShipmentDetailViewProps> = ({
       {/* TAB 4: SİPARİŞ KALEMLERİ */}
       {activeTab === 'items' && (
         <div className="bg-white rounded-xl border border-slate-200 shadow-2xs p-5 space-y-4">
-          <h3 className="font-bold text-slate-900 text-sm">Sipariş Kalem Listesi</h3>
+          <h3 className="font-bold text-slate-900 text-sm">{dt.itemsTitle}</h3>
           <div className="divide-y divide-slate-100">
             {itemsData.map((item) => (
               <div key={item.id} className="py-3 flex justify-between items-center text-xs">
                 <div>
                   <span className="font-mono font-bold text-teal-800 mr-2">{item.productCode}</span>
                   <span className="font-semibold text-slate-900">{item.productName}</span>
-                  <p className="text-[11px] text-slate-500">GTİP: {item.hsCode}</p>
+                  <p className="text-[11px] text-slate-500">{dt.hs}: {item.hsCode}</p>
                 </div>
                 <div className="text-right font-mono">
-                  <span className="font-bold">{item.orderedQty} {item.unit}</span> x {item.unitPrice} {item.currency}
+                  <span className="font-bold">{num(item.orderedQty)} {unitLabel(item.unit, lang, item.orderedQty)}</span> x {dp2(item.unitPrice)} {item.currency}
                 </div>
               </div>
             ))}
@@ -740,29 +730,29 @@ export const ShipmentDetailView: React.FC<ShipmentDetailViewProps> = ({
           <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-2xs space-y-3 text-xs">
             <h3 className="font-bold text-slate-900 text-sm flex items-center space-x-2">
               <Truck className="w-4 h-4 text-teal-600" />
-              <span>Lojistik Bilgileri</span>
+              <span>{dt.logistics}</span>
             </h3>
             <div className="space-y-2">
               <div><strong className="text-slate-500">Incoterm:</strong> {shipment.logistics.incoterm}</div>
-              <div><strong className="text-slate-500">Yükleme Limanı:</strong> {shipment.logistics.loadingPort}</div>
-              <div><strong className="text-slate-500">Varış Limanı:</strong> {shipment.logistics.dischargePort}</div>
-              <div><strong className="text-slate-500">Taşıyıcı / Acente:</strong> {shipment.logistics.carrierCompany}</div>
-              <div><strong className="text-slate-500">Gemi / Sefer:</strong> {shipment.logistics.vesselFlightNo}</div>
-              <div><strong className="text-slate-500">Booking / Konşimento No:</strong> {shipment.logistics.bookingNo}</div>
-              <div><strong className="text-slate-500">Konteyner No:</strong> {shipment.logistics.containerNo || '-'}</div>
-              <div><strong className="text-slate-500">Mühür No:</strong> {shipment.logistics.sealNo || '-'}</div>
+              <div><strong className="text-slate-500">{dt.loadingPort}</strong> {shipment.logistics.loadingPort}</div>
+              <div><strong className="text-slate-500">{dt.dischargePort}</strong> {shipment.logistics.dischargePort}</div>
+              <div><strong className="text-slate-500">{dt.carrier}</strong> {shipment.logistics.carrierCompany}</div>
+              <div><strong className="text-slate-500">{dt.vessel}</strong> {shipment.logistics.vesselFlightNo}</div>
+              <div><strong className="text-slate-500">{dt.booking}</strong> {shipment.logistics.bookingNo}</div>
+              <div><strong className="text-slate-500">{dt.container}</strong> {shipment.logistics.containerNo || '-'}</div>
+              <div><strong className="text-slate-500">{dt.seal}</strong> {shipment.logistics.sealNo || '-'}</div>
             </div>
           </div>
 
           <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-2xs space-y-3 text-xs">
             <h3 className="font-bold text-slate-900 text-sm flex items-center space-x-2">
               <CreditCard className="w-4 h-4 text-teal-600" />
-              <span>Ödeme Koşulları</span>
+              <span>{dt.paymentTitle}</span>
             </h3>
             <div className="space-y-2">
-              <div><strong className="text-slate-500">Ödeme Şekli:</strong> {shipment.payment.paymentMethod}</div>
-              <div><strong className="text-slate-500">Para Birimi:</strong> {shipment.payment.currency}</div>
-              <div><strong className="text-slate-500">Banka IBAN:</strong> {shipment.payment.bankAccountIban}</div>
+              <div><strong className="text-slate-500">{dt.paymentMethod}</strong> {t.payments[shipment.payment.paymentMethod] ?? shipment.payment.paymentMethod}</div>
+              <div><strong className="text-slate-500">{dt.currency}</strong> {shipment.payment.currency}</div>
+              <div><strong className="text-slate-500">{dt.iban}</strong> {shipment.payment.bankAccountIban}</div>
             </div>
           </div>
         </div>

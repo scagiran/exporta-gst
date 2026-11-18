@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Building2, Lock, Mail, ArrowRight, CheckCircle2, AlertCircle, Loader2, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useLang } from '../i18n';
 import './auth.css';
 
 export type AuthMode = 'signin' | 'signup';
@@ -20,6 +21,8 @@ interface AuthFormProps {
  */
 export const AuthForm: React.FC<AuthFormProps> = ({ mode, onModeChange, onSuccess, idPrefix = 'auth' }) => {
   const { signIn, signUp } = useAuth();
+  const { t } = useLang();
+  const a = t.auth;
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -42,7 +45,7 @@ export const AuthForm: React.FC<AuthFormProps> = ({ mode, onModeChange, onSucces
     setSuccessMsg(null);
 
     if (mode === 'signup' && !companyName.trim()) {
-      setErrorMsg('Şirketinizin ticari unvanını yazın.');
+      setErrorMsg(a.errCompany);
       return;
     }
 
@@ -52,10 +55,10 @@ export const AuthForm: React.FC<AuthFormProps> = ({ mode, onModeChange, onSucces
         const { error } = await signIn(email, password);
         if (error) {
           setErrorMsg(
-            error.message === 'Invalid login credentials' ? 'E-posta adresi veya şifre hatalı.' : error.message
+            error.message === 'Invalid login credentials' ? a.errCredentials : error.message
           );
         } else {
-          setSuccessMsg('Giriş yapıldı. Paneliniz açılıyor.');
+          setSuccessMsg(a.okSignin);
           onSuccess?.();
         }
       } else {
@@ -64,18 +67,15 @@ export const AuthForm: React.FC<AuthFormProps> = ({ mode, onModeChange, onSucces
           setErrorMsg(error.message);
         } else if (needsEmailConfirmation) {
           // Account exists but has no session yet: keep the instruction on screen.
-          setSuccessMsg(
-            `Hesabınız oluşturuldu. ${email} adresine bir doğrulama bağlantısı gönderdik. ` +
-              'Bağlantıya tıkladıktan sonra buradan giriş yapabilirsiniz.'
-          );
+          setSuccessMsg(a.okConfirm(email));
           onModeChange('signin');
         } else {
-          setSuccessMsg('Şirket hesabınız açıldı. Paneliniz hazırlanıyor.');
+          setSuccessMsg(a.okSignup);
           onSuccess?.();
         }
       }
     } catch (err: any) {
-      setErrorMsg(err?.message || 'Bir sorun oluştu. Lütfen tekrar deneyin.');
+      setErrorMsg(err?.message || a.errGeneric);
     } finally {
       setLoading(false);
     }
@@ -85,7 +85,7 @@ export const AuthForm: React.FC<AuthFormProps> = ({ mode, onModeChange, onSucces
 
   return (
     <div className="xa">
-      <div className="xa-tabs" role="tablist" aria-label="Hesap">
+      <div className="xa-tabs" role="tablist" aria-label={a.tablist}>
         <button
           type="button"
           role="tab"
@@ -93,7 +93,7 @@ export const AuthForm: React.FC<AuthFormProps> = ({ mode, onModeChange, onSucces
           className={`xa-tab ${mode === 'signin' ? 'is-on' : ''}`}
           onClick={() => switchMode('signin')}
         >
-          Giriş yap
+          {a.signin}
         </button>
         <button
           type="button"
@@ -102,7 +102,7 @@ export const AuthForm: React.FC<AuthFormProps> = ({ mode, onModeChange, onSucces
           className={`xa-tab ${mode === 'signup' ? 'is-on' : ''}`}
           onClick={() => switchMode('signup')}
         >
-          Şirket hesabı aç
+          {a.signup}
         </button>
         <span className={`xa-tab-ink ${mode === 'signup' ? 'is-right' : ''}`} aria-hidden="true" />
       </div>
@@ -123,7 +123,7 @@ export const AuthForm: React.FC<AuthFormProps> = ({ mode, onModeChange, onSucces
 
         {mode === 'signup' && (
           <div className="xa-field">
-            <label htmlFor={id('company')}>Şirket ticari unvanı</label>
+            <label htmlFor={id('company')}>{a.company}</label>
             <div className="xa-input">
               <Building2 aria-hidden="true" />
               <input
@@ -131,17 +131,17 @@ export const AuthForm: React.FC<AuthFormProps> = ({ mode, onModeChange, onSucces
                 type="text"
                 required
                 autoComplete="organization"
-                placeholder="ABC Dış Ticaret Ltd. Şti."
+                placeholder={a.companyPlaceholder}
                 value={companyName}
                 onChange={(e) => setCompanyName(e.target.value)}
               />
             </div>
-            <p className="xa-help">Verileriniz bu şirket adına ayrılmış alanda saklanır.</p>
+            <p className="xa-help">{a.companyHelp}</p>
           </div>
         )}
 
         <div className="xa-field">
-          <label htmlFor={id('email')}>E-posta adresi</label>
+          <label htmlFor={id('email')}>{a.email}</label>
           <div className="xa-input">
             <Mail aria-hidden="true" />
             <input
@@ -149,7 +149,7 @@ export const AuthForm: React.FC<AuthFormProps> = ({ mode, onModeChange, onSucces
               type="email"
               required
               autoComplete="email"
-              placeholder="ad@sirketiniz.com"
+              placeholder={a.emailPlaceholder}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />
@@ -157,7 +157,7 @@ export const AuthForm: React.FC<AuthFormProps> = ({ mode, onModeChange, onSucces
         </div>
 
         <div className="xa-field">
-          <label htmlFor={id('password')}>Şifre</label>
+          <label htmlFor={id('password')}>{a.password}</label>
           <div className="xa-input">
             <Lock aria-hidden="true" />
             <input
@@ -166,7 +166,7 @@ export const AuthForm: React.FC<AuthFormProps> = ({ mode, onModeChange, onSucces
               required
               minLength={6}
               autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
-              placeholder="En az 6 karakter"
+              placeholder={a.passwordPlaceholder}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
@@ -174,7 +174,7 @@ export const AuthForm: React.FC<AuthFormProps> = ({ mode, onModeChange, onSucces
               type="button"
               className="xa-eye"
               onClick={() => setShowPassword((v) => !v)}
-              aria-label={showPassword ? 'Şifreyi gizle' : 'Şifreyi göster'}
+              aria-label={showPassword ? a.hidePassword : a.showPassword}
             >
               {showPassword ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
             </button>
@@ -183,10 +183,10 @@ export const AuthForm: React.FC<AuthFormProps> = ({ mode, onModeChange, onSucces
 
         <button type="submit" disabled={loading} className={`xa-submit ${mode === 'signup' ? 'is-accent' : ''}`}>
           {loading ? (
-            <Loader2 className="xa-spin" aria-label="Gönderiliyor" />
+            <Loader2 className="xa-spin" aria-label={a.sending} />
           ) : (
             <>
-              <span>{mode === 'signin' ? 'Giriş yap' : 'Şirket hesabımı aç'}</span>
+              <span>{mode === 'signin' ? a.submitSignin : a.submitSignup}</span>
               <ArrowRight aria-hidden="true" />
             </>
           )}
@@ -195,16 +195,16 @@ export const AuthForm: React.FC<AuthFormProps> = ({ mode, onModeChange, onSucces
         <p className="xa-switch">
           {mode === 'signin' ? (
             <>
-              Hesabınız yok mu?{' '}
+              {a.noAccount}{' '}
               <button type="button" onClick={() => switchMode('signup')}>
-                Ücretsiz hesap açın
+                {a.openFree}
               </button>
             </>
           ) : (
             <>
-              Zaten hesabınız var mı?{' '}
+              {a.haveAccount}{' '}
               <button type="button" onClick={() => switchMode('signin')}>
-                Giriş yapın
+                {a.goSignin}
               </button>
             </>
           )}

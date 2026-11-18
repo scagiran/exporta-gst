@@ -3,6 +3,7 @@ import { ExPortaLogo } from './ExPortaLogo';
 import { ModalCloseButton } from './ModalCloseButton';
 import { AuthForm, AuthMode } from './AuthForm';
 import { useEscapeClose } from '../lib/useEscapeClose';
+import { useLang } from '../i18n';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -12,6 +13,7 @@ interface AuthModalProps {
 
 export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMode = 'signin' }) => {
   const [mode, setMode] = useState<AuthMode>(initialMode);
+  const { t } = useLang();
 
   // Re-open on the tab the caller asked for.
   useEffect(() => {
@@ -28,16 +30,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMo
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
-      aria-label={mode === 'signin' ? 'Giriş yap' : 'Şirket hesabı aç'}
+      aria-label={mode === 'signin' ? t.auth.signin : t.auth.signup}
     >
       <div className="relative w-full max-w-md overflow-hidden rounded-2xl bg-[#fafbfa] shadow-2xl shadow-slate-950/40">
         <div className="relative bg-slate-950 px-7 pt-7 pb-6">
           <ModalCloseButton onClose={onClose} />
           <ExPortaLogo variant="light" size="md" showSubtitle={true} />
           <p className="mt-4 text-sm leading-relaxed text-slate-300">
-            {mode === 'signin'
-              ? 'Hesabınıza girin, sevkiyatlarınız kaldığı yerden devam etsin.'
-              : 'Şirket hesabınızı açın. Ücretsiz planla hemen başlarsınız.'}
+            {mode === 'signin' ? t.auth.modalSignin : t.auth.modalSignup}
           </p>
         </div>
         <div className="px-7 pb-7 pt-2">

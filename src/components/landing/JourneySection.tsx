@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import { RotateCcw } from 'lucide-react';
+import { useLang } from '../../i18n';
 
 /*
  * "Bugün": the same data typed seven times, told as a shipment that never
@@ -22,8 +23,6 @@ const STOP = { depot: 230, kantar: 975, customs: 1665 };
 const TRUCK_LEN = 400;
 
 const ADDRESS = 'ElektroTech GmbH, Industriestr. 88, Hamburg';
-const RETYPED = ['Teklif', 'Proforma', 'Satış Emri'];
-const FILES = ['teklif_v3.pdf', 'teklif_v3_son.pdf', 'teklif_son_SON.pdf'];
 const FILE_OFFSETS: [number, number][] = [
   [-30, 352],
   [130, 326],
@@ -46,7 +45,6 @@ const smoothstep = (p: number, e0: number, e1: number) => {
   return t * t * (3 - 2 * t);
 };
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
-const kgFmt = new Intl.NumberFormat('tr-TR');
 
 const truckX = (p: number) => {
   if (p < 0.08) return STOP.depot;
@@ -69,6 +67,18 @@ function rng(seed: number) {
 }
 
 export const JourneySection: React.FC = () => {
+  const { t, num, lang } = useLang();
+  const j = t.journey;
+  const kg = (n: number) => `${num(n)} kg`;
+
+  // The scene draws outside React; it reads the current language from here.
+  const live = useRef({ j, kg });
+  live.current = { j, kg };
+  const redraw = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    redraw.current?.();
+  }, [lang]);
+
   const secRef = useRef<HTMLElement>(null);
   const sceneRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -188,7 +198,8 @@ export const JourneySection: React.FC = () => {
 
       // the weighbridge counts up
       const w = 12480 * smoothstep(p, 0.31, 0.4);
-      setText(led, `${kgFmt.format(Math.round(w / 10) * 10)} kg`);
+      const L = live.current;
+      setText(led, L.kg(Math.round(w / 10) * 10));
 
       // customs: the barrier drops and the light turns red as the truck rolls up
       const down = smoothstep(p, 0.58, 0.64);
@@ -211,9 +222,9 @@ export const JourneySection: React.FC = () => {
       place(typeCard, 40, 312);
       const rep = p < 0.02 ? 0 : Math.min(2, Math.floor((p - 0.02) / 0.05) + 1);
       const t = rep === 0 || p >= 0.12 ? 1 : (p - 0.02 - (rep - 1) * 0.05) / 0.05;
-      setText(typeTab, RETYPED[rep]);
+      setText(typeTab, L.j.retyped[rep]);
       setText(typeText, ADDRESS.slice(0, Math.round(ADDRESS.length * t)));
-      setText(typeCount, `${rep + 1}. kez yazılıyor`);
+      setText(typeCount, L.j.typedCount(rep + 1));
 
       // 02: which one is the latest? file names swirl around the truck
       const fk = smoothstep(p, 0.1, 0.14) * (1 - smoothstep(p, 0.3, 0.34));
@@ -228,7 +239,7 @@ export const JourneySection: React.FC = () => {
       place(docs, tx + 30, 306);
       sty(docs, 'opacity', smoothstep(p, 0.42, 0.47).toFixed(2));
       const swapped = p >= 0.5;
-      setText(plValue, swapped ? '12.840 kg' : '12.480 kg');
+      setText(plValue, L.kg(swapped ? 12840 : 12480));
       setClass(plValue, 'is-off', swapped);
       const st = smoothstep(p, 0.66, 0.7);
       sty(stamp, 'opacity', st.toFixed(2));
@@ -378,7 +389,14 @@ export const JourneySection: React.FC = () => {
     mqls.forEach((m) => m.addEventListener('change', applyMode));
     applyMode();
 
+    redraw.current = () => {
+      cache.clear();
+      measure();
+      render(mode === 'scroll' ? shown : mode === 'play' ? playT : 1);
+    };
+
     return () => {
+      redraw.current = null;
       stop();
       io.disconnect();
       sceneIo.disconnect();
@@ -394,30 +412,20 @@ export const JourneySection: React.FC = () => {
         <div className="xp-wrap xp-jr-head" data-reveal>
           <div>
             <p className="xp-label r" style={i(0)}>
-              Bugün
+              {j.label}
             </p>
             <h2 id="dert-h" className="xp-jr-h2 r" style={i(1)}>
-              Aynı bilgi, yedi belge, yedi kez yazılıyor.
+              {j.title}
             </h2>
           </div>
           <div className="xp-jr-leads r" style={i(2)}>
-            <p>
-              Alıcının adresi teklife, proformaya, faturaya, çeki listesine ve talimata ayrı ayrı giriliyor. Yüklemede bir
-              koli eksilince beş dosyayı tek tek açıp düzeltmeniz gerekiyor.
-            </p>
-            <p>
-              Biri gözden kaçarsa belgeler birbirini tutmuyor. Gümrük bekletiyor, evrak uyuşmazlığı yüzünden konteyner gemiye
-              yüklenemiyor.
-            </p>
+            <p>{j.lead1}</p>
+            <p>{j.lead2}</p>
           </div>
         </div>
 
         <div className="xp-wrap xp-jr-scene-wrap">
-          <p className="sr-only-xp">
-            Animasyon: kamyon depodan çıkıyor. Alıcı adresi her belge için yeniden yazılıyor, dosyalar karışıyor. Kantarda
-            12.480 kg tartılıyor ama çeki listesine 12.840 kg yazılıyor. Gümrükte uyuşmazlık damgası basılıyor, kamyon
-            bekliyor, evrak uyuşmazlığı yüzünden konteyner gemiye yüklenemiyor ve gemi onsuz limandan ayrılıyor.
-          </p>
+          <p className="sr-only-xp">{j.srScene}</p>
           <div ref={sceneRef} className="xp-jr-scene">
             <svg ref={svgRef} className="xp-jr-svg" viewBox={`0 ${Y0} 1400 ${VH}`} preserveAspectRatio="xMidYMid slice" aria-hidden="true">
               <defs>
@@ -469,7 +477,7 @@ export const JourneySection: React.FC = () => {
                 <rect className="xp-jr-cursor live" x="144" y="552" width="3" height="10" fill="#eafffb" />
                 <rect x="62" y="486" width="74" height="16" rx="2" fill="#0f2b48" />
                 <text x="99" y="498" textAnchor="middle" className="xp-jr-svg-mono" fill="#fafbfa" fontSize="11">
-                  DEPO
+                  {j.signs.depot}
                 </text>
               </g>
 
@@ -486,7 +494,7 @@ export const JourneySection: React.FC = () => {
                   0 kg
                 </text>
                 <text x="1459" y="586" textAnchor="middle" className="xp-jr-svg-mono" fill="#0f2b48" fontSize="11">
-                  KANTAR
+                  {j.signs.kantar}
                 </text>
               </g>
 
@@ -496,7 +504,7 @@ export const JourneySection: React.FC = () => {
                 <rect x="2416" y="432" width="14" height="188" fill="#33475a" />
                 <rect x="2050" y="408" width="390" height="26" rx="3" fill="#0f2b48" />
                 <text x="2245" y="426" textAnchor="middle" className="xp-jr-svg-mono" fill="#fafbfa" fontSize="13">
-                  GÜMRÜK
+                  {j.signs.customs}
                 </text>
                 <rect x="2082" y="446" width="26" height="54" rx="6" fill="#0b1a2b" />
                 <circle data-light-red className="xp-jr-light is-red" cx="2095" cy="461" r="8" />
@@ -559,7 +567,7 @@ export const JourneySection: React.FC = () => {
                   SHP-2026-014
                 </text>
                 <text x="18" y="588" className="xp-jr-svg-mono" fill="rgba(234,255,251,0.7)" fontSize="10">
-                  412 koli
+                  {j.signs.cartons(num(412))}
                 </text>
                 <rect x="0" y="598" width="402" height="12" rx="2" fill="#0b1a2b" />
                 <path d="M300 600 V546 Q300 530 316 530 H368 Q380 530 386 542 L398 566 V600 Z" fill="#0f2b48" />
@@ -583,33 +591,33 @@ export const JourneySection: React.FC = () => {
             <div className="xp-jr-over" aria-hidden="true">
               <div className="xp-jr-type" data-type>
                 <div className="xp-jr-type-top">
-                  <span data-type-tab>Teklif</span>
-                  <b data-type-count>1. kez yazılıyor</b>
+                  <span data-type-tab>{j.retyped[0]}</span>
+                  <b data-type-count>{j.typedCount(1)}</b>
                 </div>
-                <small>Alıcı adresi</small>
+                <small>{j.buyerAddress}</small>
                 <p>
                   <span data-type-text>{ADDRESS}</span>
                   <i className="live" />
                 </p>
               </div>
 
-              {FILES.map((f) => (
-                <span key={f} className="xp-jr-file" data-file>
+              {j.files.map((f, n) => (
+                <span key={n} className="xp-jr-file" data-file>
                   {f}
                 </span>
               ))}
 
               <div className="xp-jr-docs" data-docs>
                 <div className="xp-jr-doc">
-                  <span>Ticari Fatura</span>
-                  <b>12.480 kg</b>
+                  <span>{j.invoice}</span>
+                  <b>{kg(12480)}</b>
                 </div>
                 <div className="xp-jr-doc">
-                  <span>Çeki Listesi</span>
-                  <b data-pl>12.480 kg</b>
+                  <span>{j.packingList}</span>
+                  <b data-pl>{kg(12480)}</b>
                 </div>
                 <span className="xp-jr-stamp" data-stamp>
-                  UYUŞMAZLIK
+                  {j.stamp}
                 </span>
               </div>
 
@@ -617,49 +625,42 @@ export const JourneySection: React.FC = () => {
                 <span className="xp-jr-clock">
                   <i data-hand />
                 </span>
-                Gümrükte bekliyor
+                {j.held}
               </div>
               <div className="xp-jr-chip is-bank" data-bank>
                 <span>
-                  Konteyner gemiye yüklenemedi
-                  <small>Sebep: evrak uyuşmazlığı</small>
+                  {j.notLoaded}
+                  <small>{j.reason}</small>
                 </span>
               </div>
             </div>
 
             <button ref={replayRef} type="button" className="xp-jr-replay" onClick={() => playRef.current?.()}>
-              <RotateCcw aria-hidden="true" /> Tekrar oynat
+              <RotateCcw aria-hidden="true" /> {j.replay}
             </button>
           </div>
         </div>
 
         <ol className="xp-wrap xp-jr-ledger">
-          <li data-step>
-            <b>01</b>
-            <div>
-              <strong>Kopyala, yapıştır, kontrol et.</strong>
-              <span>Her sevkiyatta, her belge için yeniden.</span>
-            </div>
-            <i aria-hidden="true" />
-          </li>
-          <li data-step>
-            <b>02</b>
-            <div>
-              <strong>Hangisi son hali?</strong>
-              <span>
-                <code>teklif_v3.pdf</code>, <code>teklif_v3_son.pdf</code>, <code>teklif_son_SON.pdf</code>
-              </span>
-            </div>
-            <i aria-hidden="true" />
-          </li>
-          <li data-step>
-            <b>03</b>
-            <div>
-              <strong>Küçük bir fark, uzun bir bekleme.</strong>
-              <span>Faturada 12.480 kg, çeki listesinde 12.840 kg.</span>
-            </div>
-            <i aria-hidden="true" />
-          </li>
+          {j.steps.map((step, n) => (
+            <li key={n} data-step>
+              <b>{String(n + 1).padStart(2, '0')}</b>
+              <div>
+                <strong>{step.title}</strong>
+                <span>
+                  {n === 1
+                    ? j.files.map((f, k) => (
+                        <React.Fragment key={k}>
+                          {k > 0 && ', '}
+                          <code>{f}</code>
+                        </React.Fragment>
+                      ))
+                    : step.body}
+                </span>
+              </div>
+              <i aria-hidden="true" />
+            </li>
+          ))}
         </ol>
       </div>
     </section>

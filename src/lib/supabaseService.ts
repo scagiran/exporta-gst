@@ -2,6 +2,11 @@ import { supabase } from './supabase';
 import { Customer, Product, MasterShipment, CompanySettings, OrgPreferences } from '../types/exporta';
 import { normalizeCustomer, normalizeProduct, normalizeShipment } from './normalize';
 
+/** Outcome of a write. A Supabase call can fail without throwing, so the error field is what counts. */
+export interface WriteResult {
+  error: { message: string } | null;
+}
+
 /**
  * Fetches all organization-scoped data from Supabase Postgres for a given tenant org_id.
  */
@@ -13,6 +18,12 @@ export async function fetchOrgData(orgId: string) {
       supabase.from('shipments').select('*').eq('org_id', orgId),
       supabase.from('company_settings').select('*').eq('org_id', orgId).maybeSingle(),
     ]);
+
+    const failed = [custRes, prodRes, shipRes, settingsRes].find((r) => r.error);
+    if (failed?.error) {
+      console.error('Failed to fetch org data from Supabase:', failed.error);
+      return null;
+    }
 
     // Rows written by older versions of the app can be missing fields the UI reads,
     // so every record is normalized here rather than guarded at each call site.
@@ -43,100 +54,135 @@ export async function fetchOrgData(orgId: string) {
 /**
  * Upserts a customer record into the tenant's organization partition in Supabase.
  */
-export async function saveCustomer(orgId: string, customer: Customer) {
-  const { error } = await supabase.from('customers').upsert(
-    {
-      org_id: orgId,
-      client_id: customer.id,
-      data: customer,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: 'org_id,client_id' }
-  );
-  if (error) console.error('Error saving customer to Supabase:', error);
+export async function saveCustomer(orgId: string, customer: Customer): Promise<WriteResult> {
+  try {
+    const { error } = await supabase.from('customers').upsert(
+      {
+        org_id: orgId,
+        client_id: customer.id,
+        data: customer,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'org_id,client_id' }
+    );
+    if (error) console.error('Error saving customer to Supabase:', error);
+    return { error: error ? { message: error.message } : null };
+  } catch (err) {
+    return { error: { message: err instanceof Error ? err.message : String(err) } };
+  }
 }
 
 /**
  * Deletes a customer record from Supabase.
  */
-export async function deleteCustomer(orgId: string, customerId: string) {
-  const { error } = await supabase
-    .from('customers')
-    .delete()
-    .eq('org_id', orgId)
-    .eq('client_id', customerId);
-  if (error) console.error('Error deleting customer from Supabase:', error);
+export async function deleteCustomer(orgId: string, customerId: string): Promise<WriteResult> {
+  try {
+    const { error } = await supabase
+      .from('customers')
+      .delete()
+      .eq('org_id', orgId)
+      .eq('client_id', customerId);
+    if (error) console.error('Error deleting customer from Supabase:', error);
+    return { error: error ? { message: error.message } : null };
+  } catch (err) {
+    return { error: { message: err instanceof Error ? err.message : String(err) } };
+  }
 }
 
 /**
  * Upserts a product record into the tenant's organization partition in Supabase.
  */
-export async function saveProduct(orgId: string, product: Product) {
-  const { error } = await supabase.from('products').upsert(
-    {
-      org_id: orgId,
-      client_id: product.id,
-      data: product,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: 'org_id,client_id' }
-  );
-  if (error) console.error('Error saving product to Supabase:', error);
+export async function saveProduct(orgId: string, product: Product): Promise<WriteResult> {
+  try {
+    const { error } = await supabase.from('products').upsert(
+      {
+        org_id: orgId,
+        client_id: product.id,
+        data: product,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'org_id,client_id' }
+    );
+    if (error) console.error('Error saving product to Supabase:', error);
+    return { error: error ? { message: error.message } : null };
+  } catch (err) {
+    return { error: { message: err instanceof Error ? err.message : String(err) } };
+  }
 }
 
 /**
  * Deletes a product record from Supabase.
  */
-export async function deleteProduct(orgId: string, productId: string) {
-  const { error } = await supabase
-    .from('products')
-    .delete()
-    .eq('org_id', orgId)
-    .eq('client_id', productId);
-  if (error) console.error('Error deleting product from Supabase:', error);
+export async function deleteProduct(orgId: string, productId: string): Promise<WriteResult> {
+  try {
+    const { error } = await supabase
+      .from('products')
+      .delete()
+      .eq('org_id', orgId)
+      .eq('client_id', productId);
+    if (error) console.error('Error deleting product from Supabase:', error);
+    return { error: error ? { message: error.message } : null };
+  } catch (err) {
+    return { error: { message: err instanceof Error ? err.message : String(err) } };
+  }
 }
 
 /**
  * Upserts a master shipment record into the tenant's organization partition in Supabase.
  */
-export async function saveShipment(orgId: string, shipment: MasterShipment) {
-  const { error } = await supabase.from('shipments').upsert(
-    {
-      org_id: orgId,
-      code: shipment.id,
-      data: shipment,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: 'org_id,code' }
-  );
-  if (error) console.error('Error saving shipment to Supabase:', error);
+export async function saveShipment(orgId: string, shipment: MasterShipment): Promise<WriteResult> {
+  try {
+    const { error } = await supabase.from('shipments').upsert(
+      {
+        org_id: orgId,
+        code: shipment.id,
+        data: shipment,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'org_id,code' }
+    );
+    if (error) console.error('Error saving shipment to Supabase:', error);
+    return { error: error ? { message: error.message } : null };
+  } catch (err) {
+    return { error: { message: err instanceof Error ? err.message : String(err) } };
+  }
 }
 
 /**
  * Deletes a shipment record from Supabase.
  */
-export async function deleteShipment(orgId: string, shipmentId: string) {
-  const { error } = await supabase
-    .from('shipments')
-    .delete()
-    .eq('org_id', orgId)
-    .eq('code', shipmentId);
-  if (error) console.error('Error deleting shipment from Supabase:', error);
+export async function deleteShipment(orgId: string, shipmentId: string): Promise<WriteResult> {
+  try {
+    const { error } = await supabase
+      .from('shipments')
+      .delete()
+      .eq('org_id', orgId)
+      .eq('code', shipmentId);
+    if (error) console.error('Error deleting shipment from Supabase:', error);
+    return { error: error ? { message: error.message } : null };
+  } catch (err) {
+    return { error: { message: err instanceof Error ? err.message : String(err) } };
+  }
 }
 
 /**
  * Upserts organization company settings in Supabase.
  */
-export async function saveCompanySettings(orgId: string, settings: CompanySettings) {
-  const { error } = await supabase.from('company_settings').upsert(
-    {
-      org_id: orgId,
-      data: settings,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: 'org_id' }
-  );
-  if (error) console.error('Error saving company settings to Supabase:', error);
+export async function saveCompanySettings(orgId: string, settings: CompanySettings): Promise<WriteResult> {
+  try {
+    const { error } = await supabase.from('company_settings').upsert(
+      {
+        org_id: orgId,
+        data: settings,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'org_id' }
+    );
+    if (error) console.error('Error saving company settings to Supabase:', error);
+    return { error: error ? { message: error.message } : null };
+  } catch (err) {
+    return { error: { message: err instanceof Error ? err.message : String(err) } };
+  }
 }
 
 const LOGO_BUCKET = 'company-logos';
@@ -216,17 +262,71 @@ export async function fetchOrgPreferences(orgId: string): Promise<Partial<OrgPre
 /**
  * Upserts the full organization preferences blob.
  */
-export async function saveOrgPreferences(orgId: string, prefs: OrgPreferences) {
-  const { error } = await supabase.from('org_preferences').upsert(
-    {
-      org_id: orgId,
-      data: prefs,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: 'org_id' }
-  );
-  if (error) {
-    console.error('[ExPorta] org_preferences kaydedilemedi:', error.message, error);
+export async function saveOrgPreferences(orgId: string, prefs: OrgPreferences): Promise<WriteResult> {
+  try {
+    const { error } = await supabase.from('org_preferences').upsert(
+      {
+        org_id: orgId,
+        data: prefs,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'org_id' }
+    );
+    if (error) console.error('[ExPorta] org_preferences kaydedilemedi:', error.message, error);
+    return { error: error ? { message: error.message } : null };
+  } catch (err) {
+    return { error: { message: err instanceof Error ? err.message : String(err) } };
   }
-  return { error };
+}
+
+/*
+ * Server-side numbering (supabase/migrations/20261118_*). The counter is
+ * advanced atomically in the database, and every issued document number is
+ * recorded under a unique constraint, so two tabs or two users cannot obtain
+ * the same number. When the functions are not installed yet the call fails
+ * and the caller falls back to browser-side numbering, saying so.
+ */
+export async function nextOrgCounter(orgId: string, scope: string, atLeast: number): Promise<{ value: number | null; error: string | null }> {
+  try {
+    const { data, error } = await supabase.rpc('next_org_counter', { p_org_id: orgId, p_scope: scope, p_at_least: atLeast });
+    if (error) return { value: null, error: error.message };
+    return { value: Number(data), error: null };
+  } catch (err) {
+    return { value: null, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/** True when the number was free and is now reserved for this organisation; false when it was already taken. */
+export async function reserveDocumentNumber(orgId: string, docType: string, number: string): Promise<{ reserved: boolean | null; error: string | null }> {
+  try {
+    const { data, error } = await supabase.rpc('reserve_document_number', { p_org_id: orgId, p_doc_type: docType, p_number: number });
+    if (error) return { reserved: null, error: error.message };
+    return { reserved: data === true, error: null };
+  } catch (err) {
+    return { reserved: null, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+export interface EarlyAccessRequest {
+  email: string;
+  company?: string;
+  plan: string;
+  interest?: string;
+  lang: string;
+}
+
+/** Stores an early-access request (table early_access_requests, insert-only for visitors). */
+export async function submitEarlyAccess(req: EarlyAccessRequest): Promise<WriteResult> {
+  try {
+    const { error } = await supabase.from('early_access_requests').insert({
+      email: req.email.trim().toLowerCase(),
+      company: req.company?.trim() || null,
+      plan: req.plan,
+      interest: req.interest?.trim() || null,
+      lang: req.lang,
+    });
+    return { error: error ? { message: error.message } : null };
+  } catch (err) {
+    return { error: { message: err instanceof Error ? err.message : String(err) } };
+  }
 }

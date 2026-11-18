@@ -115,3 +115,64 @@ export function generateDocNumber(
 
   return result;
 }
+
+/*
+ * Collision-safe numbering helpers.
+ *
+ * These run in the browser and protect against the cases the browser can see:
+ * deleted records (the code is never computed from a list length), year
+ * changes (the year comes from the creation date) and numbers already present
+ * in the loaded data. They cannot see another tab or another user creating a
+ * record at the same moment; that guarantee comes from the database
+ * (supabase/migrations: org_counters, issued_document_numbers), used whenever
+ * it is available. These numbers are internal document references, not
+ * official e-invoice (e-Fatura) numbers.
+ */
+
+const SHIPMENT_CODE = /^SHP-(\d{4})-(\d+)$/;
+
+/** Highest sequence used for the given year among existing shipment codes. */
+export function maxShipmentSeq(codes: string[], year: number): number {
+  let max = 0;
+  for (const c of codes) {
+    const m = SHIPMENT_CODE.exec((c || '').trim());
+    if (m && Number(m[1]) === year) max = Math.max(max, Number(m[2]));
+  }
+  return max;
+}
+
+/**
+ * Next shipment code for the creation date: SHP-YYYY-NNN, one above both the
+ * highest code still present and the stored high-water mark (so a deleted
+ * shipment's number is not handed out again).
+ */
+export function nextShipmentCode(codes: string[], date: Date = new Date(), highWater = 0): { code: string; seq: number; year: number } {
+  const year = date.getFullYear();
+  const seq = Math.max(maxShipmentSeq(codes, year), highWater) + 1;
+  return { code: `SHP-${year}-${String(seq).padStart(3, '0')}`, seq, year };
+}
+
+/**
+ * Formats the next document number that is not already taken. Starts at the
+ * configured nextSeq and moves forward past any number found in `taken`.
+ */
+export function nextFreeDocNumber(
+  cfg: DocNumberFormat,
+  customer: Customer | { code?: string } | undefined,
+  taken: Set<string>,
+  date: Date = new Date()
+): { number: string; seq: number } {
+  let seq = Math.max(1, cfg.nextSeq || 1);
+  for (let guard = 0; guard < 10000; guard++, seq++) {
+    const number = generateDocNumber(cfg, customer, seq, date);
+    if (!taken.has(number)) return { number, seq };
+  }
+  throw new Error('No free document number found');
+}
+
+/** Every document number currently present in the given shipments. */
+export function takenDocNumbers(shipments: { documents: Record<string, { docNumber?: string }> }[]): Set<string> {
+  const out = new Set<string>();
+  for (const s of shipments) for (const d of Object.values(s.documents || {})) if (d?.docNumber) out.add(d.docNumber);
+  return out;
+}

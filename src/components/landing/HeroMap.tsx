@@ -1,7 +1,9 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowRight, ArrowDown, ChevronDown } from 'lucide-react';
 import { MEDIA } from './media';
-import { readHomeCity } from '../../lib/homeCity';
+import { readHomeCity, HomeCity } from '../../lib/homeCity';
+import { browserRegion, Lang, useLang } from '../../i18n';
+import { accent, accentWords, plain } from './accent';
 
 const MAP_URL = `${MEDIA}world.json`;
 const MAP_BYTES = 919206; // fallback when Content-Length is missing
@@ -42,15 +44,64 @@ const GATES = [
 ];
 
 const ORIGIN = 'origin';
-const ROUTES = ['Hamburg', 'Rotterdam', 'Londra', 'Kazablanka', 'Bakü', 'Dubai', 'New York'];
-/** Label side for cities that sit close together at world scale. */
-const PLACE: Record<string, string> = { Londra: 'left', Rotterdam: 'below', Hamburg: 'above', 'Bakü': 'above' };
-/** The only Turkish cities named on the map, unless the visitor's own city is known. */
-const CONTEXT = ['İstanbul', 'Ankara'];
 const EQUATOR_KM = 40075;
 
-const HOOK = 'Siz de Excel ve e-posta arasında mı kayboluyorsunuz?';
-const DOCS = ['Teklif', 'Proforma', 'Satış Emri', 'Yükleme', 'Ticari Fatura', 'Çeki Listesi', 'Talimat'];
+/** Every city the map can name. place: label side for cities that sit close together at world scale. */
+const CITIES = {
+  hamburg: { cc: 'DE', lon: 9.99, lat: 53.55, place: 'above' },
+  rotterdam: { cc: 'NL', lon: 4.48, lat: 51.92, place: 'below' },
+  london: { cc: 'GB', lon: -0.13, lat: 51.51, place: 'left' },
+  casablanca: { cc: 'MA', lon: -7.59, lat: 33.57 },
+  baku: { cc: 'AZ', lon: 49.87, lat: 40.41, place: 'above' },
+  dubai: { cc: 'AE', lon: 55.27, lat: 25.2 },
+  newyork: { cc: 'US', lon: -74.0, lat: 40.71 },
+  istanbul: { cc: 'TR', lon: 28.98, lat: 41.01 },
+  ankara: { cc: 'TR', lon: 32.86, lat: 39.93 },
+  paris: { cc: 'FR', lon: 2.35, lat: 48.86, place: 'left' },
+  shanghai: { cc: 'CN', lon: 121.47, lat: 31.23 },
+  lagos: { cc: 'NG', lon: 3.38, lat: 6.52 },
+  dakar: { cc: 'SN', lon: -17.44, lat: 14.69, place: 'left' },
+  abidjan: { cc: 'CI', lon: -4.01, lat: 5.32 },
+} as const satisfies Record<string, { cc: string; lon: number; lat: number; place?: string }>;
+type City = keyof typeof CITIES;
+const placeOf = (c: City): string | undefined => (CITIES[c] as { place?: string }).place;
+
+/** From Turkey: the routes the site has always drawn, with İstanbul and Ankara named for context. */
+const TR_ROUTES: City[] = ['hamburg', 'rotterdam', 'london', 'casablanca', 'baku', 'dubai', 'newyork'];
+const TR_CONTEXT: City[] = ['istanbul', 'ankara'];
+/** The province names homeCity uses, so a context pin steps aside for the company's own city. */
+const PROVINCE: Partial<Record<City, string>> = { istanbul: 'İstanbul', ankara: 'Ankara' };
+/** From anywhere else: near markets in the visitor's language order, then three long hauls. */
+const NEAR: Record<'fr' | 'en', City[]> = {
+  fr: ['istanbul', 'paris', 'hamburg', 'casablanca', 'dakar', 'abidjan', 'london', 'rotterdam', 'lagos'],
+  en: ['istanbul', 'london', 'hamburg', 'rotterdam', 'lagos', 'casablanca', 'dakar', 'paris', 'abidjan'],
+};
+const FAR: City[] = ['newyork', 'dubai', 'shanghai'];
+const ROUTE_COUNT = 7;
+const FOREIGN_PINS = (Object.keys(CITIES) as City[]).filter((c) => c !== 'ankara');
+
+/**
+ * Where the map starts: Turkey for a known company city or a Turkish browser,
+ * otherwise the region in the browser's language tag (fr-SN → Senegal).
+ * Nothing is looked up or sent anywhere.
+ */
+function resolveOrigin(home: HomeCity | null, lang: Lang): string {
+  if (home) return 'TR';
+  const region = browserRegion();
+  if (region && /^[A-Z]{2}$/.test(region)) return region;
+  return lang === 'fr' ? 'FR' : lang === 'en' ? 'GB' : 'TR';
+}
+
+function regionName(cc: string, locale: string): string {
+  try {
+    return new Intl.DisplayNames([locale], { type: 'region' }).of(cc) || cc;
+  } catch {
+    return cc;
+  }
+}
+
+/** A country's highlight, framing box and route origin, in world.json's plane. */
+type CountryData = { b: [number, number, number, number]; c: [number, number]; d: string };
 
 function rng(seed: number) {
   let s = seed >>> 0;
@@ -81,16 +132,30 @@ export const HeroMap: React.FC<HeroMapProps> = ({ onSignup, onSignin }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const ringRef = useRef<SVGSVGElement>(null);
 
+  const { t, lang, locale } = useLang();
+  const h = t.hero;
+
   // The company's city, if this browser has seen its settings before. Read once per visit.
   const home = useMemo(() => readHomeCity(), []);
+  // The visitor's country, decided once per visit; Turkey again if its outline fails to load.
+  const [originCC, setOriginCC] = useState(() => resolveOrigin(home, lang));
+  const fromTurkey = originCC === 'TR';
 
-  // Seeded once, so the scatter is identical on every load.
+  // The map draws outside React; it reads the current language from here.
+  const liveText = useRef({ world: h.readout.world, locale, lang });
+  liveText.current = { world: h.readout.world, locale, lang };
+  const refreshReadout = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    refreshReadout.current?.();
+  }, [lang]);
+
+  // Seeded, so the scatter is identical on every load.
   const hookWords = useMemo(() => {
-    const words = HOOK.split(' ');
+    const words = accentWords(h.hook);
     const r = rng(20261011);
-    return words.map((w, i) => ({
+    return words.map(({ w, em }, i) => ({
       w,
-      em: i === words.length - 1,
+      em,
       style: {
         '--th': (i * 0.07).toFixed(3),
         '--jx': `${Math.round(-40 - r() * 120)}px`,
@@ -98,7 +163,7 @@ export const HeroMap: React.FC<HeroMapProps> = ({ onSignup, onSignin }) => {
         '--jr': `${Math.round((r() - 0.5) * 24)}deg`,
       } as React.CSSProperties,
     }));
-  }, []);
+  }, [h.hook]);
 
   useEffect(() => {
     const hero = heroRef.current;
@@ -135,9 +200,13 @@ export const HeroMap: React.FC<HeroMapProps> = ({ onSignup, onSignin }) => {
     const fetchCtrl = new AbortController();
 
     let map: MapData | null = null;
-    let paths: { land: Path2D; borders: Path2D; turkey: Path2D; graticule: Path2D } | null = null;
-    /** Where the routes leave from: the company's city, or the middle of Turkey. */
+    let paths: { land: Path2D; borders: Path2D; home: Path2D; graticule: Path2D } | null = null;
+    /** Where the routes leave from: the company's city, the middle of Turkey, or the visitor's country. */
     let origin: [number, number] = [0, 0];
+    let homeBounds: [number, number, number, number] = [0, 0, 1, 1];
+    let routes: City[] = TR_ROUTES;
+    let context: City[] = TR_CONTEXT;
+    const cityXY = new Map<City, [number, number]>();
 
     let vw = 1;
     let vh = 1;
@@ -163,23 +232,24 @@ export const HeroMap: React.FC<HeroMapProps> = ({ onSignup, onSignin }) => {
       return clamp(-hero.getBoundingClientRect().top / range, 0, 1);
     };
 
-    // ---- the camera path: Turkey framed whole, then the whole world ----
+    // ---- the camera path: the home country framed whole, then the whole world ----
     const buildKeys = () => {
       if (!map) return;
       const [x0, y0, x1, y1] = map.bounds;
       const k1 = vw / map.w; // px per map unit at s = 1
       const fit = Math.min((0.9 * vw) / (x1 - x0), (0.58 * vh) / (y1 - y0)) / k1;
-      const [tx0, ty0, tx1, ty1] = map.turkeyBounds;
-      const turkeyFit = Math.min((0.5 * vw) / (tx1 - tx0), (0.6 * vh) / (ty1 - ty0)) / k1;
+      const [tx0, ty0, tx1, ty1] = homeBounds;
+      // Small countries stop at a sensible zoom; the 50m outlines blur beyond it.
+      const homeFit = Math.min(14, Math.min((0.5 * vw) / Math.max(1, tx1 - tx0), (0.6 * vh) / Math.max(1, ty1 - ty0)) / k1);
       const cx = (tx0 + tx1) / 2;
       const cy = (ty0 + ty1) / 2;
       const [ox, oy] = origin;
       const wx = (x0 + x1) / 2;
       const wy = (y0 + y1) / 2;
       keys = [
-        { p: 0, s: turkeyFit, fx: cx, fy: cy, ax: 0.7, ay: 0.5 },
-        { p: 0.2, s: turkeyFit * 0.86, fx: cx, fy: cy, ax: 0.7, ay: 0.5 },
-        { p: 0.46, s: 4.2, fx: ox, fy: oy, ax: 0.66, ay: 0.46 },
+        { p: 0, s: homeFit, fx: cx, fy: cy, ax: 0.7, ay: 0.5 },
+        { p: 0.2, s: homeFit * 0.86, fx: cx, fy: cy, ax: 0.7, ay: 0.5 },
+        { p: 0.46, s: Math.max(fit * 1.1, Math.min(4.2, homeFit * 0.6)), fx: ox, fy: oy, ax: 0.66, ay: 0.46 },
         { p: 0.74, s: fit, fx: wx, fy: wy, ax: 0.5, ay: 0.37 },
         { p: 1, s: fit * 0.97, fx: wx, fy: wy, ax: 0.5, ay: 0.36 },
       ];
@@ -242,7 +312,7 @@ export const HeroMap: React.FC<HeroMapProps> = ({ onSignup, onSignin }) => {
       ctx.fillStyle = '#11283d';
       ctx.fill(paths.land);
       ctx.fillStyle = '#183f58';
-      ctx.fill(paths.turkey);
+      ctx.fill(paths.home);
 
       ctx.lineWidth = 0.75 / k;
       ctx.strokeStyle = 'rgba(170, 205, 220, 0.15)';
@@ -251,7 +321,7 @@ export const HeroMap: React.FC<HeroMapProps> = ({ onSignup, onSignin }) => {
       ctx.strokeStyle = 'rgba(170, 205, 220, 0.3)';
       ctx.stroke(paths.land);
       ctx.strokeStyle = 'rgba(45, 212, 191, 0.55)';
-      ctx.stroke(paths.turkey);
+      ctx.stroke(paths.home);
 
       // Export routes: the logo's arc, drawn outwards from the origin.
       const [ox, oy] = origin;
@@ -262,11 +332,11 @@ export const HeroMap: React.FC<HeroMapProps> = ({ onSignup, onSignin }) => {
       ctx.shadowBlur = 8 * dpr;
       let drawnCount = 0;
       const heads: [number, number][] = [];
-      ROUTES.forEach((name, i) => {
+      routes.forEach((name, i) => {
         const f = routeFrac(i, routeP);
-        if (f <= 0 || !map) return;
+        if (f <= 0) return;
         if (f >= 1) drawnCount++;
-        const [dx, dy] = map.cities[name];
+        const [dx, dy] = cityXY.get(name)!;
         const mx = (ox + dx) / 2;
         const my = (oy + dy) / 2;
         const len = Math.hypot(dx - ox, dy - oy);
@@ -307,14 +377,14 @@ export const HeroMap: React.FC<HeroMapProps> = ({ onSignup, onSignin }) => {
       // A known city is always marked; otherwise the origin is only a dot once routes leave.
       const [kx, ky] = toScreen(origin);
       setPin(ORIGIN, kx, ky, home ? 1 : smoothstep(routeP, 0.47, 0.52));
-      ROUTES.forEach((name, i) => {
-        const [x, y] = toScreen(map!.cities[name]);
+      routes.forEach((name, i) => {
+        const [x, y] = toScreen(cityXY.get(name)!);
         setPin(name, x, y, smoothstep(routeFrac(i, routeP), 0.82, 1));
       });
       const ctxO = smoothstep(view.s, 5, 8);
-      CONTEXT.forEach((name) => {
-        const [x, y] = toScreen(map!.cities[name]);
-        setPin(name, x, y, home && home.name === name ? 0 : ctxO);
+      context.forEach((name) => {
+        const [x, y] = toScreen(cityXY.get(name)!);
+        setPin(name, x, y, home && home.name === PROVINCE[name] ? 0 : ctxO);
       });
 
       // The readout: how much of the world is in view, how many routes are out (about 10Hz).
@@ -322,12 +392,13 @@ export const HeroMap: React.FC<HeroMapProps> = ({ onSignup, onSignin }) => {
         lastReadout = now;
         const km = EQUATOR_KM / view.s;
         const step = km > 10000 ? 1000 : km > 3000 ? 500 : 100;
-        const kmText = km > 30000 ? 'Tüm dünya' : `≈ ${(Math.round(km / step) * step).toLocaleString('tr-TR')} km`;
+        const live = liveText.current;
+        const kmText = km > 30000 ? live.world : `≈ ${(Math.round(km / step) * step).toLocaleString(live.locale)} km`;
         if (kmText !== readKm && kmEl) {
           readKm = kmText;
           kmEl.textContent = kmText;
         }
-        const routesText = `${drawnCount} / ${ROUTES.length}`;
+        const routesText = `${drawnCount} / ${routes.length}`;
         if (routesText !== readRoutes && routesEl) {
           readRoutes = routesText;
           routesEl.textContent = routesText;
@@ -442,21 +513,51 @@ export const HeroMap: React.FC<HeroMapProps> = ({ onSignup, onSignin }) => {
       if (disposed) return;
       setRing(1);
       const text = await new Blob(chunks as BlobPart[]).text();
-      map = JSON.parse(text) as MapData;
+      const m = JSON.parse(text) as MapData;
+      const country = await countryLoad;
+      if (disposed) return;
+      map = m;
+      (Object.keys(CITIES) as City[]).forEach((c) => cityXY.set(c, project(m, CITIES[c].lon, CITIES[c].lat)));
+      if (country) {
+        origin = country.c;
+        homeBounds = country.b;
+        context = [];
+        const order = NEAR[liveText.current.lang === 'fr' ? 'fr' : 'en'];
+        // Not the visitor's own country, and nothing too close to draw a route to (about 300 km).
+        const ok = (c: City) => CITIES[c].cc !== originCC && Math.hypot(cityXY.get(c)![0] - origin[0], cityXY.get(c)![1] - origin[1]) > 18;
+        const far = FAR.filter(ok);
+        routes = [...order.filter(ok).slice(0, ROUTE_COUNT - far.length), ...far];
+      } else {
+        origin = home ? project(m, home.lon, home.lat) : m.turkeyCenter;
+        homeBounds = m.turkeyBounds;
+        // Fallen back from another country: its pins are already laid out without the context names.
+        if (originCC !== 'TR') context = [];
+      }
       paths = {
-        land: new Path2D(map.land),
-        borders: new Path2D(map.borders),
-        turkey: new Path2D(map.turkey),
-        graticule: new Path2D(map.graticule),
+        land: new Path2D(m.land),
+        borders: new Path2D(m.borders),
+        home: new Path2D(country ? country.d : m.turkey),
+        graticule: new Path2D(m.graticule),
       };
-      origin = home ? project(map, home.lon, home.lat) : map.turkeyCenter;
       buildKeys();
       render(shown);
       stage.classList.add('map-ready');
     };
+    // The visitor's country outline, fetched alongside the world. Turkey is already in world.json.
+    let countryLoad: Promise<CountryData | null> = Promise.resolve(null);
     const startLoad = () => {
       if (started || disposed) return;
       started = true;
+      if (originCC !== 'TR') {
+        countryLoad = fetch(`${MEDIA}countries/${originCC}.json`, { signal: fetchCtrl.signal })
+          .then((r) => (r.ok ? (r.json() as Promise<CountryData>) : null))
+          .then((d) => (d && Array.isArray(d.b) && Array.isArray(d.c) && typeof d.d === 'string' ? d : null))
+          .catch(() => null)
+          .then((d) => {
+            if (!d && !disposed) setOriginCC('TR');
+            return d;
+          });
+      }
       loadMap().catch(() => {
         if (!disposed) stage.classList.add('map-failed');
       });
@@ -517,6 +618,12 @@ export const HeroMap: React.FC<HeroMapProps> = ({ onSignup, onSignin }) => {
     });
     io.observe(hero);
 
+    refreshReadout.current = () => {
+      readKm = '';
+      lastReadout = 0;
+      render(shown);
+    };
+
     vw = stage.clientWidth;
     vh = stage.clientHeight;
     applyHeroMode();
@@ -524,6 +631,7 @@ export const HeroMap: React.FC<HeroMapProps> = ({ onSignup, onSignin }) => {
 
     return () => {
       disposed = true;
+      refreshReadout.current = null;
       disableScrub();
       mqls.forEach((m) => m.removeEventListener('change', applyHeroMode));
       io.disconnect();
@@ -539,8 +647,13 @@ export const HeroMap: React.FC<HeroMapProps> = ({ onSignup, onSignin }) => {
     window.scrollTo({ top: hero.offsetTop + hero.offsetHeight - window.innerHeight, behavior: 'smooth' });
   };
 
+  const destPins = fromTurkey ? TR_ROUTES : FOREIGN_PINS;
+  const ctxPins = fromTurkey ? TR_CONTEXT : [];
+  const originLabel = home ? `${home.name}, ${regionName('TR', locale)}` : regionName(originCC, locale);
+  const gatewayWords = accentWords(h.gateway);
+
   return (
-    <section ref={heroRef} className="xp-hero" aria-label="ExPorta tanıtım">
+    <section ref={heroRef} className="xp-hero" aria-label={h.aria}>
       <div ref={stageRef} className="xp-stage">
         {/* ---- the map: scroll-driven on desktops, a composed still everywhere else ---- */}
         <canvas ref={canvasRef} className="xp-map" aria-hidden="true" />
@@ -550,32 +663,32 @@ export const HeroMap: React.FC<HeroMapProps> = ({ onSignup, onSignin }) => {
             {home && (
               <span>
                 {home.name}
-                <small>Şirketinizin şehri</small>
+                <small>{h.yourCity}</small>
               </span>
             )}
           </div>
-          {ROUTES.map((name) => (
-            <div key={name} className="xp-pin is-dest" data-pin={name} data-place={PLACE[name]} style={{ opacity: 0 }}>
+          {destPins.map((c) => (
+            <div key={c} className="xp-pin is-dest" data-pin={c} data-place={placeOf(c)} style={{ opacity: 0 }}>
               <i />
-              <span>{name}</span>
+              <span>{h.cities[c]}</span>
             </div>
           ))}
-          {CONTEXT.map((name) => (
-            <div key={name} className="xp-pin is-ctx" data-pin={name} style={{ opacity: 0 }}>
+          {ctxPins.map((c) => (
+            <div key={c} className="xp-pin is-ctx" data-pin={c} style={{ opacity: 0 }}>
               <i />
-              <span>{name}</span>
+              <span>{h.cities[c]}</span>
             </div>
           ))}
         </div>
         <div className="xp-scrim" aria-hidden="true" />
 
         <div className="xp-scrubonly">
-          <h1 className="sr-only-xp">ExPorta. İhracatın Dijital Kapısı. Sevkiyattan belgeye, tüm ihracatınız tek platformda.</h1>
+          <h1 className="sr-only-xp">{h.srTitle}</h1>
 
           <div className="band xp-b1" data-a="0" data-b="0.19" data-first="1" data-exit="scatter">
-            <p className="xp-b1-kicker">Proforma, fatura, çeki listesi…</p>
+            <p className="xp-b1-kicker">{h.kicker}</p>
             <p className="xp-b1-line">
-              <span className="sr-only-xp">{HOOK}</span>
+              <span className="sr-only-xp">{plain(h.hook)}</span>
               <span aria-hidden="true">
                 {hookWords.map(({ w, em, style }, i) => (
                   <React.Fragment key={i}>
@@ -590,11 +703,11 @@ export const HeroMap: React.FC<HeroMapProps> = ({ onSignup, onSignin }) => {
 
           <div className="band xp-b2" data-a="0.22" data-b="0.47" data-ramp="0.14">
             <p className="xp-b2-head">
-              Tek veri kaynağı. <span>Sıfır karmaşa.</span>
+              {h.oneSource} <span>{h.zeroChaos}</span>
             </p>
-            <p className="xp-b2-label">Bir sevkiyat kaydı, yedi belge</p>
+            <p className="xp-b2-label">{h.docsLabel}</p>
             <ul className="xp-docrow">
-              {DOCS.map((d, i) => (
+              {h.docs.map((d, i) => (
                 <li key={d} style={{ '--th': (0.12 + i * 0.09).toFixed(2) } as React.CSSProperties}>
                   <i aria-hidden="true" />
                   {d}
@@ -606,44 +719,43 @@ export const HeroMap: React.FC<HeroMapProps> = ({ onSignup, onSignin }) => {
           <div className="xp-settle">
             <div className="band xp-b3" data-a="0.52" data-b="1" data-last="1" data-ramp="0.1">
               <p className="xp-b3-head">
-                {['İhracatın', 'Dijital', 'Kapısı.'].map((w, i) => (
-                  <React.Fragment key={w}>
-                    <span className={`w${i > 0 ? ' em' : ''}`} style={{ '--th': (i * 0.16).toFixed(2) } as React.CSSProperties}>
+                {gatewayWords.map(({ w, em }, i) => (
+                  <React.Fragment key={i}>
+                    <span className={`w${em ? ' em' : ''}`} style={{ '--th': (i * 0.16).toFixed(2) } as React.CSSProperties}>
                       {w}
                     </span>{' '}
                   </React.Fragment>
                 ))}
               </p>
-              <p className="xp-b3-sub">Sevkiyattan belgeye, tüm ihracatınız tek platformda.</p>
+              <p className="xp-b3-sub">{h.sub}</p>
             </div>
             <div className="band xp-b4" data-a="0.8" data-b="1" data-last="1" data-ramp="0.08">
               <div className="xp-b4-row">
                 <button type="button" className="xp-btn is-gate" onClick={onSignup}>
-                  Ücretsiz hesap aç <ArrowRight aria-hidden="true" />
+                  {t.nav.signup} <ArrowRight aria-hidden="true" />
                 </button>
                 <button type="button" className="xp-btn is-line-light" onClick={onSignin}>
-                  Giriş yap
+                  {t.nav.signin}
                 </button>
               </div>
-              <p className="xp-b4-micro">Ücretsiz planla başlayın, kart bilgisi istemiyoruz.</p>
+              <p className="xp-b4-micro">{h.micro}</p>
             </div>
           </div>
 
           <dl className="xp-readout xp-hud-chip" aria-hidden="true">
             <div>
-              <dt>Çıkış</dt>
-              <dd>{home ? `${home.name}, Türkiye` : 'Türkiye'}</dd>
+              <dt>{h.readout.origin}</dt>
+              <dd>{originLabel}</dd>
             </div>
             <div>
-              <dt>Görünen alan</dt>
+              <dt>{h.readout.area}</dt>
               <dd data-km />
             </div>
             <div>
-              <dt>Rota</dt>
-              <dd data-routes>0 / 7</dd>
+              <dt>{h.readout.routes}</dt>
+              <dd data-routes>0 / {ROUTE_COUNT}</dd>
             </div>
           </dl>
-
 
           <div className="xp-corner">
             <svg ref={ringRef} className="xp-ring" viewBox="0 0 48 48" aria-hidden="true">
@@ -662,27 +774,27 @@ export const HeroMap: React.FC<HeroMapProps> = ({ onSignup, onSignin }) => {
             </svg>
             <ChevronDown className="xp-cue" aria-hidden="true" />
             <button type="button" className="xp-skiphero" onClick={skipToSettle}>
-              Sonuna atla <ArrowDown aria-hidden="true" />
+              {h.skip} <ArrowDown aria-hidden="true" />
             </button>
           </div>
         </div>
 
         {/* ---- the composed still hero (phones, portrait tablets, reduced motion) ---- */}
         <div className="xp-static">
-          <p className="xp-static-kicker">Tek veri kaynağı. Sıfır karmaşa.</p>
-          <h1>
-            İhracatın <span>Dijital Kapısı.</span>
-          </h1>
-          <p className="xp-static-sub">Sevkiyattan belgeye, tüm ihracatınız tek platformda.</p>
+          <p className="xp-static-kicker">
+            {h.oneSource} {h.zeroChaos}
+          </p>
+          <h1>{accent(h.gateway)}</h1>
+          <p className="xp-static-sub">{h.sub}</p>
           <div className="xp-static-cta">
             <button type="button" className="xp-btn is-gate" onClick={onSignup}>
-              Ücretsiz hesap aç <ArrowRight aria-hidden="true" />
+              {t.nav.signup} <ArrowRight aria-hidden="true" />
             </button>
             <button type="button" className="xp-btn is-line-light" onClick={onSignin}>
-              Giriş yap
+              {t.nav.signin}
             </button>
           </div>
-          <p className="xp-static-micro">Ücretsiz planla başlayın, kart bilgisi istemiyoruz.</p>
+          <p className="xp-static-micro">{h.micro}</p>
         </div>
       </div>
     </section>

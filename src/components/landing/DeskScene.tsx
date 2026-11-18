@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { useLang } from '../../i18n';
 
 /*
  * "Hakkında": one person does the quote, the loading and the invoice. Scattered
@@ -8,30 +9,29 @@ import React, { useEffect, useRef } from 'react';
  * motion shows the final frame.
  */
 
-const ROLES = ['Teklif hazırlıyor', 'Yüklemeyi takip ediyor', 'Faturayı kesiyor'];
-const FINAL_ROLE = 'Hepsi tek ekranda';
-
-type Tile = { x: number; y: number; label: string; value: string };
+/** Monitor tiles: customers, products, shipments, documents (labels from the messages, same order). */
+type Tile = { x: number; y: number };
 const TILES: Tile[] = [
-  { x: 266, y: 116, label: 'Müşteriler', value: '24' },
-  { x: 347, y: 116, label: 'Ürünler', value: '138' },
-  { x: 266, y: 165, label: 'Sevkiyatlar', value: '6 aktif' },
-  { x: 347, y: 165, label: 'Belgeler', value: '7 / 7' },
+  { x: 266, y: 116 },
+  { x: 347, y: 116 },
+  { x: 266, y: 165 },
+  { x: 347, y: 165 },
 ];
 const TILE_W = 75;
 const TILE_H = 43;
 
-type Item = { label: string; tab: string; x: number; y: number; rot: number; tile: number };
+/** The scattered files (labels from the messages, same order) and the tile each one flies into. */
+type Item = { tab: string; x: number; y: number; rot: number; tile: number };
 const CARD_W = 112;
 const CARD_H = 28;
 const ITEMS: Item[] = [
-  { label: 'müşteriler.xlsx', tab: '#1f9d55', x: 0, y: 6, rot: -5, tile: 0 },
-  { label: 'E-posta: adres', tab: '#2f6fdb', x: 122, y: 0, rot: 4, tile: 0 },
-  { label: 'teklif_v3.pdf', tab: '#d9304f', x: 2, y: 50, rot: 3, tile: 3 },
-  { label: 'E-posta: yükleme', tab: '#2f6fdb', x: 120, y: 46, rot: -3, tile: 2 },
-  { label: 'GTİP listesi.xlsx', tab: '#1f9d55', x: 124, y: 122, rot: -4, tile: 1 },
-  { label: 'Konteyner no?', tab: '#0f2b48', x: 130, y: 166, rot: 5, tile: 2 },
-  { label: 'fatura_v2.docx', tab: '#2f6fdb', x: 124, y: 212, rot: -3, tile: 3 },
+  { tab: '#1f9d55', x: 0, y: 6, rot: -5, tile: 0 },
+  { tab: '#2f6fdb', x: 122, y: 0, rot: 4, tile: 0 },
+  { tab: '#d9304f', x: 2, y: 50, rot: 3, tile: 3 },
+  { tab: '#2f6fdb', x: 120, y: 46, rot: -3, tile: 2 },
+  { tab: '#1f9d55', x: 124, y: 122, rot: -4, tile: 1 },
+  { tab: '#0f2b48', x: 130, y: 166, rot: 5, tile: 2 },
+  { tab: '#2f6fdb', x: 124, y: 212, rot: -3, tile: 3 },
 ];
 const SHRINK = 0.32;
 
@@ -46,8 +46,20 @@ const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 const flight = (i: number): [number, number] => [0.46 + i * 0.035, 0.64 + i * 0.035];
 
 export const DeskScene: React.FC = () => {
+  const { t, lang } = useLang();
+  const d = t.about.desk;
   const wrapRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
+
+  // The scene draws outside React; it reads the current role names from here.
+  const live = useRef(d);
+  live.current = d;
+  const redraw = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    redraw.current?.();
+  }, [lang]);
+
+  const tileValues = ['24', '138', d.active(6), '7 / 7'];
 
   useEffect(() => {
     const wrap = wrapRef.current;
@@ -83,7 +95,8 @@ export const DeskScene: React.FC = () => {
       // phase A: one person, three jobs
       const role = p < 0.14 ? 0 : p < 0.28 ? 1 : 2;
       const done = p >= 0.82;
-      put(badgeText, '#text', done ? FINAL_ROLE : ROLES[role], () => (badgeText.textContent = done ? FINAL_ROLE : ROLES[role]));
+      const label = done ? live.current.done : live.current.roles[role];
+      put(badgeText, '#text', label, () => (badgeText.textContent = label));
       put(badge, '.done', String(done), () => badge.classList.toggle('is-done', done));
       const turn = p < 0.42 ? [-9, 7, -5][role] : lerp(-5, 10, smoothstep(p, 0.42, 0.52));
       attr(head, 'transform', `rotate(${turn.toFixed(1)} 92 157)`);
@@ -144,11 +157,14 @@ export const DeskScene: React.FC = () => {
       measure();
     };
 
+    redraw.current = onReduce;
+
     measure();
     window.addEventListener('scroll', onScroll, { passive: true });
     window.addEventListener('resize', onScroll);
     reduce.addEventListener('change', onReduce);
     return () => {
+      redraw.current = null;
       window.removeEventListener('scroll', onScroll);
       window.removeEventListener('resize', onScroll);
       reduce.removeEventListener('change', onReduce);
@@ -162,7 +178,7 @@ export const DeskScene: React.FC = () => {
         ref={svgRef}
         viewBox="0 0 440 280"
         role="img"
-        aria-label="Animasyon: tek bir kişi teklif, yükleme ve fatura arasında koşturuyor; etrafındaki dağınık dosyalar tek bir ekranda müşteriler, ürünler, sevkiyatlar ve yedi belge olarak toplanıyor."
+        aria-label={d.aria}
       >
         {/* desk */}
         <rect x="0" y="262" width="440" height="7" rx="2" fill="#d2dadb" />
@@ -182,7 +198,7 @@ export const DeskScene: React.FC = () => {
         <g data-badge className="xp-desk-badge">
           <rect x="12" y="86" width="160" height="26" rx="13" />
           <text data-badge-text x="92" y="103" textAnchor="middle">
-            {ROLES[0]}
+            {d.roles[0]}
           </text>
         </g>
 
@@ -198,14 +214,19 @@ export const DeskScene: React.FC = () => {
           {[122, 134, 146, 158].map((y) => (
             <rect key={y} x="249" y={y} width="8" height="3" rx="1.5" fill={y === 146 ? '#2dd4bf' : '#475a6b'} />
           ))}
-          {TILES.map((t) => (
-            <g key={t.label} data-tile className="xp-desk-tile" opacity="0.18">
-              <rect x={t.x} y={t.y} width={TILE_W} height={TILE_H} rx="5" />
-              <text className="lbl" x={t.x + 7} y={t.y + 15}>
-                {t.label}
+          {TILES.map((tile, n) => (
+            <g key={n} data-tile className="xp-desk-tile" opacity="0.18">
+              <rect x={tile.x} y={tile.y} width={TILE_W} height={TILE_H} rx="5" />
+              <text className="lbl" x={tile.x + 7} y={tile.y + 15}>
+                {d.tiles[n]}
               </text>
-              <text className="val" x={t.x + 7} y={t.y + 34}>
-                {t.value}
+              <text
+                className="val"
+                x={tile.x + 7}
+                y={tile.y + 34}
+                {...(tileValues[n].length > 8 ? { textLength: TILE_W - 12, lengthAdjust: 'spacingAndGlyphs' } : {})}
+              >
+                {tileValues[n]}
               </text>
             </g>
           ))}
@@ -218,12 +239,12 @@ export const DeskScene: React.FC = () => {
         <circle data-dot cx="412" cy="64" r="4.5" fill="#0b7368" opacity="0" />
 
         {/* the scattered files */}
-        {ITEMS.map((it) => (
-          <g key={it.label} data-item className="xp-desk-item" transform={`translate(${it.x} ${it.y}) rotate(${it.rot} ${CARD_W / 2} ${CARD_H / 2})`}>
+        {ITEMS.map((it, n) => (
+          <g key={n} data-item className="xp-desk-item" transform={`translate(${it.x} ${it.y}) rotate(${it.rot} ${CARD_W / 2} ${CARD_H / 2})`}>
             <rect width={CARD_W} height={CARD_H} rx="6" />
             <rect width="6" height={CARD_H} rx="3" fill={it.tab} />
             <text x="14" y="18.5">
-              {it.label}
+              {d.items[n]}
             </text>
           </g>
         ))}

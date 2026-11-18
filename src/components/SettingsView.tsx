@@ -1,9 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { CompanySettings, CustomField, DocType, DocTemplate, DocNumberFormat, CustomFieldType, CustomFieldModule, DocNumberHistory } from '../types/exporta';
-import { generateDocNumber, DOC_TYPE_NAMES } from '../lib/numbering';
+import { generateDocNumber } from '../lib/numbering';
 import { Settings, Building, Sliders, Hash, Layout, Plus, Trash2, Edit, Check, Eye, AlertCircle, History, RefreshCw, ImageIcon, Loader2, UploadCloud } from 'lucide-react';
 import { ModalCloseButton } from './ModalCloseButton';
 import { useEscapeClose } from '../lib/useEscapeClose';
+import { useLang } from '../i18n';
+import type { SaveOutcome } from '../lib/saveTypes';
+import { outcomeMessage } from './AppNotice';
 import { useAuth } from '../context/AuthContext';
 import {
   uploadCompanyLogo,
@@ -14,12 +17,12 @@ import {
 
 interface SettingsViewProps {
   companySettings: CompanySettings;
-  onUpdateCompanySettings: (settings: CompanySettings) => void;
+  onUpdateCompanySettings: (settings: CompanySettings) => Promise<SaveOutcome>;
   customFields: CustomField[];
   onAddCustomField: (field: CustomField) => void;
   onDeleteCustomField: (id: string) => void;
   docNumberFormats: Record<DocType, DocNumberFormat>;
-  onUpdateNumberFormat: (docType: DocType, format: DocNumberFormat, reason: string) => void;
+  onUpdateNumberFormat: (docType: DocType, format: DocNumberFormat, reason: string) => Promise<SaveOutcome>;
   numberHistory: DocNumberHistory[];
 }
 
@@ -34,6 +37,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   numberHistory,
 }) => {
   const { organization } = useAuth();
+  const { t } = useLang();
+  const st = t.settings;
+  const DOC_TYPE_NAMES = t.docNames;
   const [activeTab, setActiveTab] = useState<'company' | 'custom_fields' | 'numbering'>('company');
 
   // Company settings local state. Re-synced whenever the prop changes so the
@@ -64,15 +70,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     if (!file) return;
 
     if (!organization?.id) {
-      setLogoError('Organizasyon yüklenmediği için logo kaydedilemedi. Çıkış yapıp tekrar girin.');
+      setLogoError(st.logoNoOrg);
       return;
     }
     if (!LOGO_ACCEPTED_TYPES.includes(file.type)) {
-      setLogoError('Yalnızca PNG, JPEG veya SVG dosyaları yüklenebilir.');
+      setLogoError(st.logoType);
       return;
     }
     if (file.size > LOGO_MAX_BYTES) {
-      setLogoError('Dosya 2 MB sınırını aşıyor. Lütfen daha küçük bir görsel seçin.');
+      setLogoError(st.logoSize);
       return;
     }
 
@@ -81,7 +87,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setLogoBusy(false);
 
     if (error || !url) {
-      setLogoError(error || 'Logo yüklenemedi.');
+      setLogoError(error ? `${st.logoUploadFailed}: ${error.replace(/^Logo yüklenemedi: /, '')}` : st.logoUploadFailed);
       return;
     }
     persistLogoUrl(url);
@@ -97,7 +103,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     const { error } = await deleteCompanyLogo(organization.id);
     setLogoBusy(false);
     if (error) {
-      setLogoError(error);
+      setLogoError(`${st.logoDeleteFailed}: ${error.replace(/^Logo silinemedi: /, '')}`);
       return;
     }
     persistLogoUrl(undefined);
@@ -138,7 +144,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const closeFieldModal = () => {
     if (
       fieldFormDirty &&
-      !window.confirm('Kaydedilmemiş değişiklikler var, çıkmak istediğinize emin misiniz?')
+      !window.confirm(t.forms.unsaved)
     ) {
       return;
     }
@@ -148,16 +154,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
   useEscapeClose(isFieldModalOpen, closeFieldModal);
 
-  const handleSaveCompany = (e: React.FormEvent) => {
+  const [companyMsg, setCompanyMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const handleSaveCompany = async (e: React.FormEvent) => {
     e.preventDefault();
-    onUpdateCompanySettings(companyForm);
-    alert('Firma ve varsayılan şablon ayarları başarıyla kaydedildi!');
+    const outcome = await onUpdateCompanySettings(companyForm);
+    setCompanyMsg({ ok: outcome !== 'failed', text: outcome === 'saved' ? st.saved : outcomeMessage(t, outcome) });
   };
 
   const handleAddCustomFieldSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newFieldName.trim()) {
-      alert('Lütfen bir alan adı girin.');
+      alert(st.fieldNameRequired);
       return;
     }
 
@@ -186,19 +193,16 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setNumChangeReason('');
   };
 
-  const handleSaveNumberFormat = () => {
+  const handleSaveNumberFormat = async () => {
     const current = docNumberFormats[selectedNumDocType];
     if (current.prefix === numPrefix && current.format === numFormatStr) {
-      alert('Formatta bir değişiklik yok.');
+      alert(st.noChange);
       return;
     }
 
     // The prefix only lands anywhere if the pattern actually contains the token.
     if (current.prefix !== numPrefix && !numFormatStr.includes('{PREFIX}')) {
-      alert(
-        'Önek değişikliği bu formatta etkisiz kalır: numara kalıbında {PREFIX} token\'ı yok.\n\n' +
-        `Kalıbı örneğin "{PREFIX}-{YYYY}-{CUSTOMER}-{SEQ}" şeklinde yazın.`
-      );
+      alert(st.prefixUnused);
       return;
     }
 
@@ -209,9 +213,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       nextSeq: numNextSeq,
       seqLength: 3,
     };
-    onUpdateNumberFormat(selectedNumDocType, updated, numChangeReason.trim() || 'Gerekçe belirtilmedi');
+    const outcome = await onUpdateNumberFormat(selectedNumDocType, updated, numChangeReason.trim() || st.noReason);
     setNumChangeReason('');
-    alert(`${DOC_TYPE_NAMES[selectedNumDocType]} numaralandırma formatı güncellendi. Bundan sonra oluşturulan sevkiyatlarda bu format kullanılacak.`);
+    alert(outcome === 'saved' ? st.formatSaved(DOC_TYPE_NAMES[selectedNumDocType]) : outcomeMessage(t, outcome));
   };
 
   // Sample Customer for live preview
@@ -231,10 +235,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-2xs">
         <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
           <Settings className="w-5 h-5 text-teal-600" />
-          <span>Firma, Özel Alanlar & Numaralandırma Ayarları</span>
+          <span>{st.title}</span>
         </h2>
         <p className="text-xs text-slate-500 mt-1">
-          ExPorta platform ayarlarınızı, işletmenize özel alanları ve belge numaralandırma kurallarınızı yönetin.
+          {st.lead}
         </p>
       </div>
 
@@ -247,7 +251,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           }`}
         >
           <Building className="w-4 h-4 text-teal-600" />
-          <span>Firma & Banka Ayarları</span>
+          <span>{st.tabCompany}</span>
         </button>
 
         <button
@@ -257,7 +261,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           }`}
         >
           <Sliders className="w-4 h-4 text-teal-600" />
-          <span>Kullanıcı Tanımlı Özel Alanlar</span>
+          <span>{st.tabFields}</span>
         </button>
 
         <button
@@ -267,7 +271,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           }`}
         >
           <Hash className="w-4 h-4 text-teal-600" />
-          <span>Belge Numaralandırma Kuralları</span>
+          <span>{st.tabNumbering}</span>
         </button>
       </div>
 
@@ -275,10 +279,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       {activeTab === 'company' && (
         <form onSubmit={handleSaveCompany} className="bg-white rounded-xl border border-slate-200 shadow-2xs p-6 space-y-6 text-xs">
           <div>
-            <h3 className="font-bold text-slate-900 text-sm pb-2 border-b border-slate-200">Firma Resmi Bilgileri</h3>
+            <h3 className="font-bold text-slate-900 text-sm pb-2 border-b border-slate-200">{st.official}</h3>
             <div className="grid grid-cols-2 gap-4 mt-4">
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Firma Ticari Unvanı *</label>
+                <label className="block font-semibold text-slate-700 mb-1">{st.companyName}</label>
                 <input
                   type="text"
                   required
@@ -288,18 +292,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 />
               </div>
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Vergi Numarası & Dairesi *</label>
+                <label className="block font-semibold text-slate-700 mb-1">{st.tax}</label>
                 <div className="grid grid-cols-2 gap-2">
                   <input
                     type="text"
-                    placeholder="Vergi No"
+                    placeholder={st.taxNo}
                     value={companyForm.taxNo}
                     onChange={(e) => setCompanyForm({ ...companyForm, taxNo: e.target.value })}
                     className="border border-slate-300 rounded-lg p-2 font-mono"
                   />
                   <input
                     type="text"
-                    placeholder="Vergi Dairesi"
+                    placeholder={st.taxOffice}
                     value={companyForm.taxOffice}
                     onChange={(e) => setCompanyForm({ ...companyForm, taxOffice: e.target.value })}
                     className="border border-slate-300 rounded-lg p-2"
@@ -310,7 +314,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
             <div className="grid grid-cols-2 gap-4 mt-4">
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Fatura Adresi *</label>
+                <label className="block font-semibold text-slate-700 mb-1">{st.address}</label>
                 <textarea
                   rows={2}
                   value={companyForm.address}
@@ -320,7 +324,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Şehir</label>
+                  <label className="block font-semibold text-slate-700 mb-1">{st.city}</label>
                   <input
                     type="text"
                     value={companyForm.city}
@@ -329,7 +333,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">E-posta</label>
+                  <label className="block font-semibold text-slate-700 mb-1">{st.email}</label>
                   <input
                     type="email"
                     value={companyForm.email}
@@ -342,10 +346,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
             {/* Company Logo */}
             <div className="mt-6">
-              <label className="block font-semibold text-slate-700 mb-1">Firma Logosu</label>
+              <label className="block font-semibold text-slate-700 mb-1">{st.logo}</label>
               <p className="text-[11px] text-slate-500 mb-3">
-                PNG, JPEG veya SVG · en fazla 2 MB. Logo, üç belge şablonunda da firma
-                adının yanında görünür.
+                {st.logoHint}
               </p>
 
               <div className="flex items-center gap-4">
@@ -353,13 +356,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   {companyForm.logoUrl ? (
                     <img
                       src={companyForm.logoUrl}
-                      alt="Firma logosu"
+                      alt={st.logoAlt}
                       className="max-w-full max-h-full object-contain"
                     />
                   ) : (
                     <div className="flex flex-col items-center text-slate-400">
                       <ImageIcon className="w-7 h-7" />
-                      <span className="text-[9px] mt-1">Logo yok</span>
+                      <span className="text-[9px] mt-1">{st.noLogo}</span>
                     </div>
                   )}
                 </div>
@@ -388,7 +391,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       ) : (
                         <UploadCloud className="w-4 h-4 text-teal-600" />
                       )}
-                      <span>{companyForm.logoUrl ? 'Logoyu Değiştir' : 'Logo Yükle'}</span>
+                      <span>{companyForm.logoUrl ? st.changeLogo : st.uploadLogo}</span>
                     </button>
 
                     {companyForm.logoUrl && (
@@ -399,7 +402,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         className="py-2 px-3 bg-white hover:bg-red-50 text-slate-600 hover:text-red-600 font-semibold text-xs rounded-lg border border-slate-300 flex items-center gap-1.5 disabled:opacity-50"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
-                        <span>Kaldır</span>
+                        <span>{st.removeLogo}</span>
                       </button>
                     )}
                   </div>
@@ -417,10 +420,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
           {/* Bank Details */}
           <div>
-            <h3 className="font-bold text-slate-900 text-sm pb-2 border-b border-slate-200">Banka & Swift Bilgileri</h3>
+            <h3 className="font-bold text-slate-900 text-sm pb-2 border-b border-slate-200">{st.bank}</h3>
             <div className="grid grid-cols-3 gap-4 mt-4">
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Banka Adı & Şubesi</label>
+                <label className="block font-semibold text-slate-700 mb-1">{st.bankName}</label>
                 <input
                   type="text"
                   value={companyForm.bankName}
@@ -429,7 +432,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 />
               </div>
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">IBAN Numarası</label>
+                <label className="block font-semibold text-slate-700 mb-1">{st.iban}</label>
                 <input
                   type="text"
                   value={companyForm.iban}
@@ -438,7 +441,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 />
               </div>
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">SWIFT / BIC Kodu</label>
+                <label className="block font-semibold text-slate-700 mb-1">{st.swift}</label>
                 <input
                   type="text"
                   value={companyForm.swiftCode}
@@ -451,9 +454,23 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
           {/* Default Document Templates requested in rule 8 */}
           <div>
-            <h3 className="font-bold text-slate-900 text-sm pb-2 border-b border-slate-200">Varsayılan Belge Şablon Tercihleri</h3>
+            <h3 className="font-bold text-slate-900 text-sm pb-2 border-b border-slate-200">{st.templates}</h3>
+            <div className="mt-3 mb-5 max-w-sm">
+              <label htmlFor="vgm-tolerance" className="block font-semibold text-slate-700 mb-1">{t.settings2.tolerance}</label>
+              <input
+                id="vgm-tolerance"
+                type="number"
+                min={0}
+                max={50}
+                step="0.5"
+                value={companyForm.vgmWarningTolerancePct ?? 5}
+                onChange={(e) => setCompanyForm({ ...companyForm, vgmWarningTolerancePct: Math.max(0, Number(e.target.value) || 0) })}
+                className="w-32 border border-slate-300 rounded-lg p-2 font-mono"
+              />
+              <p className="text-[11px] text-slate-500 mt-1">{t.settings2.toleranceHint}</p>
+            </div>
             <p className="text-[11px] text-slate-500 mt-1">
-              Her belge türü için sisteminizin varsayılan olarak açacağı şablonu belirleyin.
+              {st.templatesLead}
             </p>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-4">
               {docTypesList.map((dt) => (
@@ -472,9 +489,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     }
                     className="w-full border border-slate-300 rounded p-1.5 font-bold bg-white text-xs"
                   >
-                    <option value="classic">CLASSIC (Klasik)</option>
-                    <option value="modern">MODERN (Modern)</option>
-                    <option value="compact">COMPACT (Kompakt)</option>
+                    <option value="classic">{st.tplClassic}</option>
+                    <option value="modern">{st.tplModern}</option>
+                    <option value="compact">{st.tplCompact}</option>
                   </select>
                 </div>
               ))}
@@ -487,9 +504,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               className="py-2.5 px-6 bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs rounded-lg shadow-xs flex items-center space-x-1.5"
             >
               <Check className="w-4 h-4" />
-              <span>Ayarları Kaydet</span>
+              <span>{st.saveSettings}</span>
             </button>
           </div>
+          {companyMsg && (
+            <p role="status" className={`text-right text-xs font-semibold ${companyMsg.ok ? 'text-emerald-700' : 'text-red-700'}`}>
+              {companyMsg.text}
+            </p>
+          )}
         </form>
       )}
 
@@ -498,9 +520,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         <div className="space-y-6">
           <div className="flex justify-between items-center bg-white p-5 rounded-xl border border-slate-200 shadow-2xs">
             <div>
-              <h3 className="font-bold text-slate-900 text-sm">İşletmenize Özel Tanımlı Alanlar (Custom Labels)</h3>
+              <h3 className="font-bold text-slate-900 text-sm">{st.fieldsTitle}</h3>
               <p className="text-xs text-slate-500 mt-0.5">
-                Fabrika Sipariş No, İç Sipariş No, Forwarder vb. özel alanlarınızı oluşturun. Sistem standart alanlarını bozmaz.
+                {st.fieldsLead}
               </p>
             </div>
             <button
@@ -508,7 +530,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               className="py-2 px-4 bg-teal-600 hover:bg-teal-700 text-white font-semibold text-xs rounded-lg shadow-xs flex items-center space-x-1.5"
             >
               <Plus className="w-4 h-4" />
-              <span>+ Yeni Alan Oluştur</span>
+              <span>{st.newField}</span>
             </button>
           </div>
 
@@ -516,37 +538,39 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             <table className="w-full text-xs text-left">
               <thead className="bg-slate-100 text-slate-700 font-semibold uppercase text-[10px] border-b border-slate-200">
                 <tr>
-                  <th className="py-3 px-4">Alan Adı</th>
-                  <th className="py-3 px-4">Alan Tipi</th>
-                  <th className="py-3 px-4">Modül</th>
-                  <th className="py-3 px-4">Zorunlu Mu?</th>
-                  <th className="py-3 px-4">Belgelerde Göster</th>
-                  <th className="py-3 px-4 text-center">İşlem</th>
+                  <th className="py-3 px-4">{st.colName}</th>
+                  <th className="py-3 px-4">{st.colType}</th>
+                  <th className="py-3 px-4">{st.colModule}</th>
+                  <th className="py-3 px-4">{st.colRequired}</th>
+                  <th className="py-3 px-4">{st.colShow}</th>
+                  <th className="py-3 px-4 text-center">{st.colActions}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {customFields.map((cf) => (
                   <tr key={cf.id} className="hover:bg-slate-50">
                     <td className="py-3 px-4 font-bold text-slate-900">{cf.name}</td>
-                    <td className="py-3 px-4 font-mono font-semibold text-teal-800 uppercase text-[10px]">{cf.type}</td>
-                    <td className="py-3 px-4 uppercase text-[10px] font-bold text-slate-700">{cf.module}</td>
+                    <td className="py-3 px-4 font-mono font-semibold text-teal-800 uppercase text-[10px]">{st.types[cf.type] ?? cf.type}</td>
+                    <td className="py-3 px-4 uppercase text-[10px] font-bold text-slate-700">{st.modules[cf.module] ?? cf.module}</td>
                     <td className="py-3 px-4">
                       {cf.required ? (
-                        <span className="px-2 py-0.5 rounded bg-red-100 text-red-700 font-bold text-[10px]">Zorunlu</span>
+                        <span className="px-2 py-0.5 rounded bg-red-100 text-red-700 font-bold text-[10px]">{st.required}</span>
                       ) : (
-                        <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px]">Opsiyonel</span>
+                        <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px]">{st.optional}</span>
                       )}
                     </td>
                     <td className="py-3 px-4">
                       {cf.showInDocs ? (
-                        <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold text-[10px]">Gösterilsin</span>
+                        <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold text-[10px]">{st.shown}</span>
                       ) : (
-                        <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-500 text-[10px]">Gizli</span>
+                        <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-500 text-[10px]">{st.hidden}</span>
                       )}
                     </td>
                     <td className="py-3 px-4 text-center">
                       <button
                         onClick={() => onDeleteCustomField(cf.id)}
+                        title={st.deleteField}
+                        aria-label={st.deleteField}
                         className="p-1 text-slate-400 hover:text-red-600 rounded"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -568,61 +592,62 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <div className="relative bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden my-8">
                 <ModalCloseButton onClose={closeFieldModal} />
                 <div className="px-6 py-4 bg-slate-900 text-white flex justify-between items-center">
-                  <h3 className="font-bold text-base">+ Yeni Özel Alan Tanımla</h3>
+                  <h3 className="font-bold text-base">{st.fieldModalTitle}</h3>
                 </div>
 
                 <form onSubmit={handleAddCustomFieldSubmit} onChange={() => setFieldFormDirty(true)} className="p-6 space-y-4 text-xs">
                   <div>
-                    <label className="block font-semibold text-slate-700 mb-1">Alan Adı *</label>
+                    <label className="block font-semibold text-slate-700 mb-1">{st.fieldName}</label>
                     <input
                       type="text"
                       required
                       value={newFieldName}
                       onChange={(e) => setNewFieldName(e.target.value)}
-                      placeholder="Örn: Fabrika Sipariş No veya Forwarder"
+                      placeholder={st.fieldNamePlaceholder}
                       className="w-full border border-slate-300 rounded-lg p-2"
                     />
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block font-semibold text-slate-700 mb-1">Alan Tipi *</label>
+                      <label className="block font-semibold text-slate-700 mb-1">{st.fieldType}</label>
                       <select
                         value={newFieldType}
                         onChange={(e) => setNewFieldType(e.target.value as CustomFieldType)}
                         className="w-full border border-slate-300 rounded-lg p-2 bg-white"
                       >
-                        <option value="text">Metin (Text)</option>
-                        <option value="number">Sayı (Number)</option>
-                        <option value="date">Tarih (Date)</option>
-                        <option value="select">Seçim Listesi (Select)</option>
-                        <option value="currency">Para (Currency)</option>
-                        <option value="boolean">Evet / Hayır (Boolean)</option>
+                        {['text', 'number', 'date', 'select', 'currency', 'boolean'].map((ft) => (
+                          <option key={ft} value={ft}>
+                            {st.types[ft]}
+                          </option>
+                        ))}
                       </select>
                     </div>
 
                     <div>
-                      <label className="block font-semibold text-slate-700 mb-1">Hangi Modülde? *</label>
+                      <label className="block font-semibold text-slate-700 mb-1">{st.fieldModule}</label>
                       <select
                         value={newFieldModule}
                         onChange={(e) => setNewFieldModule(e.target.value as CustomFieldModule)}
                         className="w-full border border-slate-300 rounded-lg p-2 bg-white"
                       >
-                        <option value="shipment">Sevkiyat Dosyası</option>
-                        <option value="customer">Müşteri Kartı</option>
-                        <option value="product">Ürün Kartı</option>
+                        {['shipment', 'customer', 'product'].map((m) => (
+                          <option key={m} value={m}>
+                            {st.modules[m]}
+                          </option>
+                        ))}
                       </select>
                     </div>
                   </div>
 
                   {newFieldType === 'select' && (
                     <div>
-                      <label className="block font-semibold text-slate-700 mb-1">Seçenekler (Virgülle Ayırın)</label>
+                      <label className="block font-semibold text-slate-700 mb-1">{st.options}</label>
                       <input
                         type="text"
                         value={newFieldOptions}
                         onChange={(e) => setNewFieldOptions(e.target.value)}
-                        placeholder="Seçenek 1, Seçenek 2, Seçenek 3"
+                        placeholder={st.optionsPlaceholder}
                         className="w-full border border-slate-300 rounded-lg p-2"
                       />
                     </div>
@@ -636,7 +661,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         onChange={(e) => setNewFieldRequired(e.target.checked)}
                         className="rounded text-teal-600"
                       />
-                      <span className="font-medium text-slate-800">Zorunlu Alan</span>
+                      <span className="font-medium text-slate-800">{st.requiredField}</span>
                     </label>
 
                     <label className="flex items-center space-x-2 cursor-pointer">
@@ -646,7 +671,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         onChange={(e) => setNewFieldShowInDocs(e.target.checked)}
                         className="rounded text-teal-600"
                       />
-                      <span className="font-medium text-slate-800">Belgelerde Gösterilsin</span>
+                      <span className="font-medium text-slate-800">{st.showInDocs}</span>
                     </label>
                   </div>
 
@@ -656,13 +681,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       onClick={closeFieldModal}
                       className="px-4 py-2 border border-slate-300 hover:bg-slate-100 text-slate-700 font-semibold rounded-lg"
                     >
-                      İptal
+                      {st.cancel}
                     </button>
                     <button
                       type="submit"
                       className="px-5 py-2 bg-teal-600 hover:bg-teal-700 text-white font-semibold rounded-lg shadow-xs"
                     >
-                      Alanı Oluştur
+                      {st.createField}
                     </button>
                   </div>
                 </form>
@@ -677,7 +702,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 text-xs">
           {/* Left: Document Types list */}
           <div className="bg-white rounded-xl border border-slate-200 shadow-2xs p-4 space-y-2">
-            <h3 className="font-bold text-slate-900 text-xs uppercase tracking-wider text-slate-500 mb-3">Belge Türleri</h3>
+            <h3 className="font-bold text-slate-900 text-xs uppercase tracking-wider text-slate-500 mb-3">{st.docTypes}</h3>
             {docTypesList.map((dt) => {
               const isSel = selectedNumDocType === dt;
               return (
@@ -702,16 +727,16 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             <div className="bg-white rounded-xl border border-slate-200 shadow-2xs p-6 space-y-6">
               <div>
                 <h3 className="font-bold text-slate-900 text-sm">
-                  {DOC_TYPE_NAMES[selectedNumDocType]} Formatı Özelleştirme
+                  {st.formatTitle(DOC_TYPE_NAMES[selectedNumDocType])}
                 </h3>
                 <p className="text-xs text-slate-500 mt-1">
-                  Kullanabileceğiniz token'lar: <code className="bg-slate-100 px-1 py-0.5 rounded text-teal-700 font-bold">{'{PREFIX}'}</code>, <code className="bg-slate-100 px-1 py-0.5 rounded text-teal-700 font-bold">{'{YYYY}'}</code>, <code className="bg-slate-100 px-1 py-0.5 rounded text-teal-700 font-bold">{'{YYYYMM}'}</code>, <code className="bg-slate-100 px-1 py-0.5 rounded text-teal-700 font-bold">{'{CUSTOMER}'}</code>, <code className="bg-slate-100 px-1 py-0.5 rounded text-teal-700 font-bold">{'{SEQ}'}</code>
+                  {st.tokens} <code className="bg-slate-100 px-1 py-0.5 rounded text-teal-700 font-bold">{'{PREFIX}'}</code>, <code className="bg-slate-100 px-1 py-0.5 rounded text-teal-700 font-bold">{'{YYYY}'}</code>, <code className="bg-slate-100 px-1 py-0.5 rounded text-teal-700 font-bold">{'{YYYYMM}'}</code>, <code className="bg-slate-100 px-1 py-0.5 rounded text-teal-700 font-bold">{'{CUSTOMER}'}</code>, <code className="bg-slate-100 px-1 py-0.5 rounded text-teal-700 font-bold">{'{SEQ}'}</code>
                 </p>
               </div>
 
               <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Önek (Prefix)</label>
+                  <label className="block font-semibold text-slate-700 mb-1">{st.prefix}</label>
                   <input
                     type="text"
                     value={numPrefix}
@@ -720,7 +745,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   />
                 </div>
                 <div className="col-span-2">
-                  <label className="block font-semibold text-slate-700 mb-1">Numara Formatı Kalıbı</label>
+                  <label className="block font-semibold text-slate-700 mb-1">{st.pattern}</label>
                   <input
                     type="text"
                     value={numFormatStr}
@@ -732,23 +757,23 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
               {/* Live Preview Result Box explicitly mandated in Rule 6 */}
               <div className="bg-teal-900 text-white p-5 rounded-xl space-y-2 border border-teal-800 shadow-sm">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-teal-300 block">CANLI ÖNİZLEME (LIVE PREVIEW OUTPUT)</span>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-teal-300 block">{st.livePreview}</span>
                 <div className="text-2xl font-mono font-black text-white tracking-widest">
                   {livePreviewNum}
                 </div>
                 <p className="text-[11px] text-teal-200">
-                  Örnek Müşteri Kodu: "ELEK" | Yıl: 2026 | Ay: 08 | Sıra No: 001
+                  {st.sample}
                 </p>
               </div>
 
               <div className="flex items-end justify-between gap-4">
                 <div className="flex-1">
-                  <label className="block font-semibold text-slate-700 mb-1">Değişiklik Gerekçesi (Audit Log'a yazılır)</label>
+                  <label className="block font-semibold text-slate-700 mb-1">{st.reason}</label>
                   <input
                     type="text"
                     value={numChangeReason}
                     onChange={(e) => setNumChangeReason(e.target.value)}
-                    placeholder="Örn: Müşteri talebi üzerine yıl-ay formatına geçildi"
+                    placeholder={st.reasonPlaceholder}
                     className="w-full border border-slate-300 rounded-lg p-2"
                   />
                 </div>
@@ -757,7 +782,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   className="py-2.5 px-5 bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs rounded-lg shadow-xs flex items-center space-x-1 shrink-0"
                 >
                   <Check className="w-4 h-4 mr-1" />
-                  <span>Formatı Kaydet</span>
+                  <span>{st.saveFormat}</span>
                 </button>
               </div>
             </div>
@@ -766,11 +791,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             <div className="bg-white rounded-xl border border-slate-200 shadow-2xs p-5 space-y-3">
               <h4 className="font-bold text-slate-900 text-xs uppercase tracking-wider flex items-center gap-1.5 text-slate-600">
                 <History className="w-4 h-4 text-teal-600" />
-                <span>Belge Numaralandırma Değişiklik Geçmişi (Audit Log)</span>
+                <span>{st.history}</span>
               </h4>
               <div className="space-y-2">
                 {numberHistory.length === 0 ? (
-                  <p className="text-xs text-slate-500 italic p-3 bg-slate-50 rounded">Henüz bir numaralandırma formatı değiştirilmedi.</p>
+                  <p className="text-xs text-slate-500 italic p-3 bg-slate-50 rounded">{st.noHistory}</p>
                 ) : (
                   numberHistory.map((h) => (
                     <div key={h.id} className="p-3 bg-slate-50 rounded border border-slate-200 flex justify-between items-center text-xs">

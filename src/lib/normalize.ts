@@ -103,9 +103,14 @@ function normalizeDocuments(
       template: d.template || 'classic',
       createdAt: str(d.createdAt, today()),
       updatedAt: str(d.updatedAt, today()),
-      notes: d.notes,
+      // Older versions wrote the note to customNotes; it is the same note.
+      notes: d.notes ?? (d as { customNotes?: string }).customNotes,
       showImages: d.showImages,
       presentationImageUrl: d.presentationImageUrl,
+      lang: d.lang === 'tr' || d.lang === 'en' || d.lang === 'fr' ? d.lang : undefined,
+      revision: typeof d.revision === 'number' ? d.revision : undefined,
+      approved: d.approved,
+      history: Array.isArray(d.history) ? d.history : undefined,
     };
   });
 
@@ -127,16 +132,19 @@ export function normalizeShipment(raw: Partial<MasterShipment>, id?: string): Ma
     items: Array.isArray(s.items) ? s.items.map(normalizeItem) : [],
     logistics: {
       incoterm: logistics.incoterm || 'FOB',
+      namedPlace: logistics.namedPlace,
       loadingPort: str(logistics.loadingPort),
       dischargePort: str(logistics.dischargePort),
+      destinationCountry: logistics.destinationCountry,
       transportMode: logistics.transportMode || 'Sea',
       carrierCompany: str(logistics.carrierCompany),
       vesselFlightNo: str(logistics.vesselFlightNo),
       bookingNo: str(logistics.bookingNo),
       containerNo: logistics.containerNo,
       sealNo: logistics.sealNo,
-      estimatedLoadingDate: str(logistics.estimatedLoadingDate, today()),
-      estimatedArrivalDate: str(logistics.estimatedArrivalDate, today()),
+      // A missing date stays missing: inventing "today" would put it on the dashboard as due.
+      estimatedLoadingDate: str(logistics.estimatedLoadingDate),
+      estimatedArrivalDate: str(logistics.estimatedArrivalDate),
       forwarderName: logistics.forwarderName,
     },
     payment: {
@@ -148,6 +156,9 @@ export function normalizeShipment(raw: Partial<MasterShipment>, id?: string): Ma
     actualLoadingEntered: s.actualLoadingEntered === true,
     actualLoadingDate: s.actualLoadingDate,
     totalVgmKg: s.totalVgmKg,
+    vgmKg: s.vgmKg,
+    measuredCargoGrossKg: s.measuredCargoGrossKg,
+    containerTareKg: s.containerTareKg,
     notes: s.notes,
     customFields: s.customFields || {},
     createdAt: str(s.createdAt, today()),

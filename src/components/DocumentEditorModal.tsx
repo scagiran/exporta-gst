@@ -1,6 +1,11 @@
 import React, { useState, useRef } from 'react';
 import { MasterShipment, DocType, DocTemplate, CompanySettings, DocStatus, ShipmentItem } from '../types/exporta';
-import { DOC_TYPE_NAMES } from '../lib/numbering';
+import { useLang, LANGS, LANG_LABEL, Lang } from '../i18n';
+import { messages } from '../i18n/messages';
+import { resolveDocContent, DocIssue } from '../lib/commerce';
+import type { SaveOutcome, StatusChangeResult } from '../lib/saveTypes';
+import { IssueList } from './IssueList';
+import { outcomeMessage } from './AppNotice';
 import { DocumentRenderer } from './DocumentRenderer';
 import { downloadPdfFromElement, printElement } from '../lib/pdfGenerator';
 import { ModalCloseButton } from './ModalCloseButton';
@@ -22,6 +27,7 @@ import {
   Save,
   Trash2,
   Edit3,
+  Globe,
   Sparkles,
   Package,
   Plus,
@@ -37,42 +43,13 @@ interface DocumentEditorModalProps {
   docType: DocType;
   companySettings: CompanySettings;
   onUpdateTemplate: (shipmentId: string, docType: DocType, template: DocTemplate) => void;
-  onUpdateStatus: (shipmentId: string, docType: DocType, status: DocStatus) => void;
+  onUpdateLang?: (shipmentId: string, docType: DocType, lang: Lang) => void;
+  onUpdateStatus: (shipmentId: string, docType: DocType, status: DocStatus) => Promise<StatusChangeResult>;
+  onReviseDocument?: (shipmentId: string, docType: DocType) => Promise<SaveOutcome>;
   onUpdateShipmentItems?: (shipmentId: string, items: ShipmentItem[]) => void;
-  onUpdateDocNotes?: (shipmentId: string, docType: DocType, notes: string) => void;
+  onUpdateDocNotes?: (shipmentId: string, docType: DocType, notes: string) => Promise<SaveOutcome> | void;
   onResetDocument?: (shipmentId: string, docType: DocType) => void;
 }
-
-const DEFAULT_PRESET_NOTES: Record<DocType, string[]> = {
-  quotation: [
-    '1. İşbu teklif verildiği tarihten itibaren 30 takvim günü süreyle geçerlidir.\n2. Fiyatlarımıza ihracat ambalajlama ve fabrikamız teslimi (EXW) dahildir.\n3. Ödeme %30 siparişle peşin, kalan %70 yükleme öncesi banka havalesi ile yapılacaktır.',
-    '1. Teslimat süresi sipariş onayından ve avans ödemesinden itibaren 14 iş günüdür.\n2. Akreditifli ödemelerde akreditif açılış masrafları alıcıya aittir.',
-  ],
-  proforma: [
-    '1. İşbu Proforma Fatura sipariş teyididir. Lütfen kaşe imza ile onaylayarak tarafımıza iletiniz.\n2. Ödeme %30 peşin transfer, %70 yükleme öncesi CAD / Akreditif şeklindedir.\n3. Alıcı banka masrafları ve muhabir banka kesintileri alıcıya aittir.',
-    '1. Fatura bedeli belirtilen IBAN hesabına EUR cinsinden yatırılacaktır.\n2. Sevkiyat akreditif şartlarında belirtilen son yükleme tarihine kadar gerçekleştirilecektir.',
-  ],
-  sales_order: [
-    '1. Üretim ve paketleme emirleri onaylanmış teknik çizimlere göre başlatılacaktır.\n2. Ahşap palet ambalajlar ISPM-15 karantina standartlarına uygundur.',
-    '1. Kalite kontrol ve test sertifikaları sevkiyat evrakları ile birlikte teslim edilecektir.',
-  ],
-  actual_loading: [
-    '1. Yükleme işlemi fabrikamız alanında gümrük kantar fişi KTR-2026 gözetiminde yapılmıştır.\n2. Tüm kaplar ve koliler numaralandırılarak mühür numarası MS-SEAL ile kapatılmıştır.',
-    '1. Fiziki yükleme sayımı yapılmış, teslimat raporuna işlenmiştir.',
-  ],
-  commercial_invoice: [
-    '1. İşbu faturada tanımlanan mallar Türkiye Cumhuriyeti menşelidir ve gümrük beyanına uygundur.\n2. Garanti süresi teslim tarihinden itibaren 24 aydır.\n3. Fatura tutarı sözleşmeye ve gümrük mevzuatına uygundur.',
-    '1. Goods are of Turkish origin and covered by A.TR / EUR.1 movement certificate.\n2. Payment terms as agreed under LC conditions.',
-  ],
-  packing_list: [
-    '1. Tüm paletler streç film ve çelik çember ile ambalajlanmıştır.\n2. Ahşap ambalaj malzemeleri ISPM-15 standardına uygundur.\n3. Net ve brüt ağırlıklar kantar onaylıdır.',
-    '1. Packaged on Euro pallets (120x80 cm) with waterproof covering.\n2. Container sealing: MSC-SEAL-004921.',
-  ],
-  shipping_instruction: [
-    '1. Konşimento (B/L) talimatı: Consignee kısmına alıcı firma adı ve adresi yazılmalıdır.\n2. Notify Party: Acente ve forwarder iletişim bilgileri eklenmelidir.\n3. Freight Prepaid / Collect bilgisi kontrol edilmelidir.',
-    '1. VGM Beyanı SOLAS Yöntem 1 uyarınca kantar fişi ile acenteye iletilmiştir.',
-  ],
-};
 
 export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
   isOpen,
@@ -81,14 +58,24 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
   docType,
   companySettings,
   onUpdateTemplate,
+  onUpdateLang,
   onUpdateStatus,
+  onReviseDocument,
   onUpdateShipmentItems,
   onUpdateDocNotes,
   onResetDocument,
 }) => {
+  const { t, lang: uiLang } = useLang();
+  const e = t.editor;
+  const DOC_TYPE_NAMES = t.docNames;
   const docInfo = shipment.documents[docType];
+  // The document's own language, independent of the interface (TR, EN or FR).
+  const [docLang, setDocLang] = useState<Lang>(docInfo.lang ?? uiLang);
   const [currentTemplate, setCurrentTemplate] = useState<DocTemplate>(docInfo.template || 'classic');
-  const [currentStatus, setCurrentStatus] = useState<DocStatus>(docInfo.status || 'hazir');
+  // Status always reflects the saved document: approval can be refused, and the editor must not pretend otherwise.
+  const currentStatus: DocStatus = docInfo.status || 'taslak';
+  const [blockedIssues, setBlockedIssues] = useState<DocIssue[] | null>(null);
+  const [resultNote, setResultNote] = useState<{ ok: boolean; text: string } | null>(null);
   const [copied, setCopied] = useState(false);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
@@ -113,15 +100,17 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
   // Local state for shipment items to allow editing in real-time
   const [items, setItems] = useState<ShipmentItem[]>(shipment.items);
 
-  // Minimal dirty flag: flipped on by any editable control, cleared by "Kaydet".
-  // Note-only changes go through their own save button, so they clear it too.
-  const [dirty, setDirty] = useState(false);
-  const markDirty = () => setDirty(true);
+  // Template, language, status and quantities are applied (and saved) as soon as
+  // they change. Only the note text is a draft, so it is the only thing that
+  // can be lost by closing; the warning appears only then.
+  const dirty = notesText !== (docInfo.notes || '');
+  const setDirty = (_v: boolean) => undefined;
+  const markDirty = () => undefined;
 
   const confirmClose = () => {
     if (
       dirty &&
-      !window.confirm('Kaydedilmemiş değişiklikler var, çıkmak istediğinize emin misiniz?')
+      !window.confirm(e.unsaved)
     ) {
       return;
     }
@@ -132,23 +121,23 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleSaveNotes = () => {
-    if (onUpdateDocNotes) {
-      onUpdateDocNotes(shipment.id, docType, notesText);
-    }
-    setDirty(false);
-    setNotesSavedSuccess(true);
-    setTimeout(() => setNotesSavedSuccess(false), 2000);
+  const report = (outcome: SaveOutcome | void) => {
+    if (!outcome) return;
+    setResultNote({ ok: outcome !== 'failed', text: outcomeMessage(t, outcome) });
   };
 
-  const handleDeleteNotes = () => {
-    setNotesText('');
-    if (onUpdateDocNotes) {
-      onUpdateDocNotes(shipment.id, docType, '');
+  const handleSaveNotes = async () => {
+    const outcome = await onUpdateDocNotes?.(shipment.id, docType, notesText);
+    report(outcome);
+    if (outcome !== 'failed') {
+      setNotesSavedSuccess(true);
+      setTimeout(() => setNotesSavedSuccess(false), 2000);
     }
-    setDirty(false);
-    setNotesSavedSuccess(true);
-    setTimeout(() => setNotesSavedSuccess(false), 2000);
+  };
+
+  const handleDeleteNotes = async () => {
+    setNotesText('');
+    report(await onUpdateDocNotes?.(shipment.id, docType, ''));
   };
 
   const handleTemplateChange = (tpl: DocTemplate) => {
@@ -157,10 +146,21 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
     markDirty();
   };
 
-  const handleStatusChange = (st: DocStatus) => {
-    setCurrentStatus(st);
-    onUpdateStatus(shipment.id, docType, st);
+  const handleLangChange = (l: Lang) => {
+    setDocLang(l);
+    onUpdateLang?.(shipment.id, docType, l);
     markDirty();
+  };
+
+  const handleStatusChange = async (st: DocStatus) => {
+    setBlockedIssues(null);
+    const r = await onUpdateStatus(shipment.id, docType, st);
+    if (r.ok === false) setBlockedIssues(r.issues);
+  };
+
+  const handleCreateRevision = async () => {
+    if (!onReviseDocument || !window.confirm(t.approval.revisionConfirm)) return;
+    report(await onReviseDocument(shipment.id, docType));
   };
 
   // Sync all proforma quantities to actual loading quantities
@@ -193,16 +193,17 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
     const newItem: ShipmentItem = {
       id: `item-${Date.now()}`,
       productId: `prod-${Date.now()}`,
-      productCode: `EXP-${Math.floor(100 + Math.random() * 900)}`,
-      productName: 'Yeni İhraç Kalemi',
-      hsCode: '8481.80.00.00',
-      unit: 'Pcs',
-      orderedQty: 100,
-      actualLoadedQty: 100,
-      unitPrice: 25.0,
+      // A blank line: no invented code, price, quantity or weight.
+      productCode: '',
+      productName: e.newItem,
+      hsCode: '',
+      unit: 'Adet',
+      orderedQty: 0,
+      actualLoadedQty: shipment.actualLoadingEntered ? 0 : undefined,
+      unitPrice: 0,
       currency: shipment.payment.currency || 'EUR',
-      netWeightKg: 2.5,
-      grossWeightKg: 2.8,
+      netWeightKg: 0,
+      grossWeightKg: 0,
     };
     const updated = [...items, newItem];
     setItems(updated);
@@ -223,26 +224,22 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
   };
 
   // Save all document settings at once
-  const handleSaveAll = () => {
-    if (onUpdateDocNotes) {
-      onUpdateDocNotes(shipment.id, docType, notesText);
+  // Everything except the note is already applied; saving writes the note and reports the outcome.
+  const handleSaveAll = async () => {
+    const outcome = await onUpdateDocNotes?.(shipment.id, docType, notesText);
+    report(outcome);
+    if (outcome !== 'failed') {
+      setDocSaveSuccess(true);
+      setTimeout(() => setDocSaveSuccess(false), 3000);
     }
-    onUpdateTemplate(shipment.id, docType, currentTemplate);
-    onUpdateStatus(shipment.id, docType, currentStatus);
-    if (onUpdateShipmentItems) {
-      onUpdateShipmentItems(shipment.id, items);
-    }
-    setDirty(false);
-    setDocSaveSuccess(true);
-    setTimeout(() => setDocSaveSuccess(false), 3000);
   };
 
   // Reset entire document to clean default state
   const handleResetAll = () => {
-    if (window.confirm('Bu belgenin özel notlarını, şablonunu ve ayarlarını sıfırlamak istediğinize emin misiniz?')) {
+    if (window.confirm(e.resetConfirm)) {
       setNotesText('');
-      setCurrentTemplate('classic');
-      setCurrentStatus('taslak');
+      setCurrentTemplate(companySettings.defaultTemplates?.[docType] ?? 'classic');
+      setBlockedIssues(null);
       setItems(shipment.items);
       if (onResetDocument) {
         onResetDocument(shipment.id, docType);
@@ -270,7 +267,7 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
       await downloadPdfFromElement(documentRef.current, fileName);
     } catch (e) {
       console.error(e);
-      alert('PDF oluşturulamadı. Lütfen tekrar deneyin; sorun sürerse "Yazdır" ile tarayıcıdan PDF alabilirsiniz.');
+      alert(e.pdfFailed);
     } finally {
       setIsGeneratingPdf(false);
     }
@@ -280,7 +277,7 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
     if (!documentRef.current) return;
     const opened = printElement(documentRef.current);
     if (!opened) {
-      alert('Yazdırma penceresi açılamadı. Tarayıcınızın açılır pencere (pop-up) engelleyicisini bu site için kapatın.');
+      alert(e.printFailed);
     }
   };
 
@@ -298,6 +295,17 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
     { label: 'CNC Parça', url: 'https://images.unsplash.com/photo-1581092580497-e0d23cbdf1dc?w=300&auto=format&fit=crop&q=80' },
     { label: 'Hidrolik Rakor', url: 'https://images.unsplash.com/photo-1617788138017-80ad40651399?w=300&auto=format&fit=crop&q=80' },
   ];
+
+  // The preview shows the draft note and the document's own settings over the saved shipment.
+  const previewShipment = {
+    ...shipment,
+    items,
+    documents: {
+      ...shipment.documents,
+      [docType]: { ...docInfo, notes: notesText, template: currentTemplate, status: currentStatus, lang: docLang },
+    },
+  };
+  const resolved = resolveDocContent(previewShipment, docType, companySettings);
 
   return (
     <div
@@ -320,7 +328,7 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
                   {docInfo.docNumber}
                 </span>
               </h3>
-              <p className="text-xs text-slate-400">Sevkiyat: {shipment.shipmentCode} ({shipment.customer.companyName})</p>
+              <p className="text-xs text-slate-400">{e.shipment}: {shipment.shipmentCode} ({shipment.customer.companyName})</p>
             </div>
           </div>
 
@@ -336,14 +344,14 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
               }`}
             >
               <Image className="w-3.5 h-3.5" />
-              <span>{showImages ? 'Görsel Alanı: AÇIK' : 'Görsel Alanı: KAPALI'}</span>
+              <span>{showImages ? e.imagesOn : e.imagesOff}</span>
             </button>
 
             <button
               onClick={() => setIsImagePanelOpen(!isImagePanelOpen)}
               className="px-2.5 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs font-semibold rounded flex items-center space-x-1"
             >
-              <span>+ Görselleri Düzenle</span>
+              <span>{e.editImages}</span>
               {isImagePanelOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
             </button>
           </div>
@@ -358,7 +366,7 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
             }`}
           >
             <Package className="w-3.5 h-3.5" />
-            <span>Miktar & Kalemler</span>
+            <span>{e.qtyItems}</span>
             {isQtyPanelOpen ? <ChevronUp className="w-3.5 h-3.5 ml-1" /> : <ChevronDown className="w-3.5 h-3.5 ml-1" />}
           </button>
 
@@ -374,7 +382,7 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
             }`}
           >
             <StickyNote className="w-3.5 h-3.5" />
-            <span>{notesText.trim() ? 'Notlar (Düzenle / Sil)' : '+ Belge Notu Ekle'}</span>
+            <span>{notesText.trim() ? e.notesEdit : e.notesAdd}</span>
             {notesText.trim() && (
               <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
             )}
@@ -385,7 +393,7 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
           <div className="flex items-center space-x-3 bg-slate-800 p-1.5 rounded-lg border border-slate-700">
             <span className="text-xs text-slate-400 font-semibold px-2 flex items-center space-x-1">
               <Layout className="w-3.5 h-3.5" />
-              <span>Şablon:</span>
+              <span>{e.template}</span>
             </span>
             <button
               onClick={() => handleTemplateChange('classic')}
@@ -413,24 +421,52 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
             </button>
           </div>
 
+          {/* Document language: each document can be issued in TR, EN or FR */}
+          <div
+            role="group"
+            aria-label={e.docLangHint}
+            title={e.docLangHint}
+            className="flex items-center space-x-1 bg-slate-800 p-1.5 rounded-lg border border-slate-700"
+          >
+            <span className="text-xs text-slate-400 font-semibold px-2 flex items-center space-x-1">
+              <Globe className="w-3.5 h-3.5" />
+              <span>{e.docLang}</span>
+            </span>
+            {LANGS.map((l) => (
+              <button
+                key={l}
+                type="button"
+                lang={l}
+                title={LANG_LABEL[l]}
+                aria-pressed={docLang === l}
+                onClick={() => handleLangChange(l)}
+                className={`px-2.5 py-1.5 rounded text-xs font-bold uppercase transition-all ${
+                  docLang === l ? 'bg-teal-500 text-slate-950 shadow-xs' : 'text-slate-300 hover:text-white'
+                }`}
+              >
+                {l}
+              </button>
+            ))}
+          </div>
+
           {/* Save & Reset Global Buttons */}
           <div className="flex items-center space-x-2 border-l border-slate-700 pl-3">
             <button
               onClick={handleSaveAll}
               className="py-1.5 px-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-lg flex items-center space-x-1 shadow-xs transition-colors"
-              title="Belge değişikliklerini kaydet"
+              title={e.saveTitle}
             >
               <Save className="w-3.5 h-3.5" />
-              <span>Kaydet</span>
+              <span>{e.save}</span>
             </button>
 
             <button
               onClick={handleResetAll}
               className="py-1.5 px-2.5 bg-red-950/80 hover:bg-red-900 text-red-200 font-semibold text-xs rounded-lg border border-red-800 flex items-center space-x-1 transition-colors"
-              title="Belge notlarını ve ayarlarını sıfırla / sil"
+              title={e.resetTitle}
             >
               <Trash2 className="w-3.5 h-3.5 text-red-400" />
-              <span>Sıfırla / Sil</span>
+              <span>{e.reset}</span>
             </button>
           </div>
 
@@ -441,7 +477,7 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
               className="py-1.5 px-3 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-lg border border-slate-700 flex items-center space-x-1 transition-colors"
             >
               {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-              <span>{copied ? 'Kopyalandı' : 'Numara Kopyala'}</span>
+              <span>{copied ? e.copied : e.copyNo}</span>
             </button>
 
             <button
@@ -452,12 +488,12 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
               {isGeneratingPdf ? (
                 <>
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>PDF Oluşturuluyor...</span>
+                  <span>{e.generating}</span>
                 </>
               ) : (
                 <>
                   <Download className="w-3.5 h-3.5" />
-                  <span>PDF İndir</span>
+                  <span>{e.downloadPdf}</span>
                 </>
               )}
             </button>
@@ -467,7 +503,7 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
               className="py-1.5 px-3 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs rounded-lg border border-slate-700 flex items-center space-x-1 transition-colors"
             >
               <Printer className="w-3.5 h-3.5" />
-              <span>Yazdır</span>
+              <span>{e.print}</span>
             </button>
           </div>
         </div>
@@ -477,9 +513,9 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
           <div className="bg-emerald-600 text-white px-6 py-2.5 text-xs font-bold flex items-center justify-between shrink-0 shadow-inner animate-pulse">
             <div className="flex items-center space-x-2">
               <CheckCircle2 className="w-4 h-4" />
-              <span>{DOC_TYPE_NAMES[docType]} belgesi, notları, miktarları ve ayarları başarıyla kaydedildi!</span>
+              <span>{e.savedBanner(DOC_TYPE_NAMES[docType])}</span>
             </div>
-            <span className="text-[10px] bg-emerald-800/60 px-2 py-0.5 rounded">Kaydedildi</span>
+            <span className="text-[10px] bg-emerald-800/60 px-2 py-0.5 rounded">{e.savedTag}</span>
           </div>
         )}
 
@@ -487,9 +523,9 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
           <div className="bg-amber-600 text-white px-6 py-2.5 text-xs font-bold flex items-center justify-between shrink-0 shadow-inner">
             <div className="flex items-center space-x-2">
               <RotateCcw className="w-4 h-4" />
-              <span>Belge varsayılan durumuna sıfırlandı. Notlar ve özel ayarlar temizlendi.</span>
+              <span>{e.resetBanner}</span>
             </div>
-            <span className="text-[10px] bg-amber-800/60 px-2 py-0.5 rounded">Sıfırlandı</span>
+            <span className="text-[10px] bg-amber-800/60 px-2 py-0.5 rounded">{e.resetTag}</span>
           </div>
         )}
 
@@ -500,12 +536,12 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
               <div className="flex items-center space-x-2">
                 <Package className="w-4 h-4 text-teal-400" />
                 <h4 className="font-bold text-teal-300">
-                  {DOC_TYPE_NAMES[docType]} - Belge Kalem & Miktar Yönetimi
+                  {e.qtyTitle(DOC_TYPE_NAMES[docType])}
                 </h4>
                 {itemsSavedSuccess && (
                   <span className="bg-emerald-900/90 text-emerald-300 border border-emerald-700 text-[10px] px-2 py-0.5 rounded flex items-center gap-1 font-semibold animate-bounce">
                     <CheckCircle2 className="w-3 h-3" />
-                    <span>Miktarlar Eşitlendi!</span>
+                    <span>{e.synced}</span>
                   </span>
                 )}
               </div>
@@ -516,10 +552,10 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
                   type="button"
                   onClick={handleSyncAllProformaToActual}
                   className="px-3 py-1.5 bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs rounded-lg flex items-center space-x-1.5 transition-colors shadow-2xs"
-                  title="Proforma adetlerini fiili yüklenen adetlere kopyalar"
+                  title={e.syncTitle}
                 >
                   <Zap className="w-3.5 h-3.5 text-amber-300" />
-                  <span>⚡ Proforma Adetlerini Fiili Yüklemeye Eşitle</span>
+                  <span>{e.syncAll}</span>
                 </button>
 
                 <button
@@ -528,14 +564,13 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
                   className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold text-xs rounded-lg border border-slate-600 flex items-center space-x-1"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  <span>+ Kalem Ekle</span>
+                  <span>{e.addItem}</span>
                 </button>
               </div>
             </div>
 
             <p className="text-[11px] text-slate-400">
-              Sevkiyat günü yüklenen fiziki adetler (Actual Loading) proforma sipariş adetlerinden farklı olabilir.
-              Aşağıdaki tablodan sipariş ve yükleme adetlerini bağımsız güncelleyebilir veya tek tıkla eşitleyebilirsiniz.
+              {e.qtyLead}
             </p>
 
             {/* Items Table */}
@@ -543,12 +578,12 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
               <table className="w-full text-left text-xs">
                 <thead className="bg-slate-900 text-slate-300 font-semibold uppercase text-[10px]">
                   <tr>
-                    <th className="py-2 px-3">Ürün / Kalem</th>
-                    <th className="py-2 px-3 text-center">Proforma / Sipariş (Adet)</th>
-                    <th className="py-2 px-3 text-center">Fiili Yüklenen (Actual Loading)</th>
-                    <th className="py-2 px-3 text-right">Birim Fiyat ({shipment.payment.currency || 'EUR'})</th>
-                    <th className="py-2 px-3">Açıklama / Kalem Notu</th>
-                    <th className="py-2 px-3 text-center">Aksiyon</th>
+                    <th className="py-2 px-3">{e.colItem}</th>
+                    <th className="py-2 px-3 text-center">{e.colOrdered}</th>
+                    <th className="py-2 px-3 text-center">{e.colActual}</th>
+                    <th className="py-2 px-3 text-right">{e.colPrice(shipment.payment.currency || 'EUR')}</th>
+                    <th className="py-2 px-3">{e.colNote}</th>
+                    <th className="py-2 px-3 text-center">{e.colAction}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-700/60 bg-slate-900/50">
@@ -585,7 +620,7 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
                             />
                             {isDiff && (
                               <span className="text-[9px] font-mono px-1 py-0.5 bg-amber-900/60 text-amber-300 rounded border border-amber-700 shrink-0">
-                                Farklı
+                                {e.differs}
                               </span>
                             )}
                           </div>
@@ -604,7 +639,7 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
                             type="text"
                             value={item.customNotes || ''}
                             onChange={(e) => handleUpdateItemField(item.id, 'customNotes', e.target.value)}
-                            placeholder="Örn: Özel ambalaj..."
+                            placeholder={e.notePlaceholder}
                             className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-[11px] text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-teal-500"
                           />
                         </td>
@@ -614,15 +649,16 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
                               type="button"
                               onClick={() => handleUpdateItemField(item.id, 'actualLoadedQty', item.orderedQty)}
                               className="px-2 py-1 bg-slate-800 hover:bg-teal-900/50 hover:text-teal-200 text-slate-300 text-[10px] font-semibold rounded border border-slate-700"
-                              title="Fiili yükleme adetini proforma adeti ile aynı yap"
+                              title={e.matchTitle}
                             >
-                              Eşitle
+                              {e.match}
                             </button>
                             <button
                               type="button"
                               onClick={() => handleDeleteItem(item.id)}
                               className="p-1 bg-red-950/60 hover:bg-red-900 text-red-300 rounded border border-red-800"
-                              title="Kalemi Sil"
+                              title={e.deleteItem}
+                              aria-label={e.deleteItem}
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -643,10 +679,10 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
             <div className="flex justify-between items-center">
               <h4 className="font-bold text-teal-400 flex items-center space-x-2">
                 <Image className="w-4 h-4" />
-                <span>Ürün Görselleri & Sunum Alanı Ayarları</span>
+                <span>{e.imagesTitle}</span>
               </h4>
               <p className="text-[11px] text-slate-400">
-                Görseller Quotation ve Proforma belgelerinde ürün tablosunda ve görsel sunum alanında görüntülenir.
+                {e.imagesLead}
               </p>
             </div>
 
@@ -657,7 +693,7 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
                     <img src={item.imageUrl} alt={item.productName} className="w-12 h-12 object-cover rounded border border-slate-600 shrink-0" />
                   ) : (
                     <div className="w-12 h-12 bg-slate-800 rounded border border-slate-700 flex items-center justify-center text-slate-500 text-[10px] shrink-0">
-                      Görsel Yok
+                      {e.noImage}
                     </div>
                   )}
 
@@ -668,7 +704,7 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
                         type="text"
                         value={item.imageUrl || ''}
                         onChange={(e) => handleItemImageChange(item.id, e.target.value)}
-                        placeholder="Görsel URL yapıştırın..."
+                        placeholder={e.imagePlaceholder}
                         className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 font-mono text-[11px] text-teal-300 focus:outline-none focus:border-teal-500"
                       />
                     </div>
@@ -680,14 +716,14 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
                       onClick={() => handleItemImageChange(item.id, SAMPLE_IMAGES[Math.floor(Math.random() * SAMPLE_IMAGES.length)].url)}
                       className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] rounded border border-slate-700"
                     >
-                      Örnek Seç
+                      {e.pickSample}
                     </button>
                     {item.imageUrl && (
                       <button
                         onClick={() => handleItemImageChange(item.id, '')}
                         className="px-2 py-1 bg-red-900/50 hover:bg-red-800 text-red-300 text-[10px] rounded border border-red-800"
                       >
-                        Kaldır
+                        {e.removeImage}
                       </button>
                     )}
                   </div>
@@ -704,17 +740,17 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
               <div className="flex items-center space-x-2">
                 <StickyNote className="w-4 h-4 text-amber-400" />
                 <h4 className="font-bold text-amber-300">
-                  {DOC_TYPE_NAMES[docType]} - Belge Notu Düzenleme & Yönetimi
+                  {e.notesTitle(DOC_TYPE_NAMES[docType])}
                 </h4>
                 {notesSavedSuccess && (
                   <span className="bg-emerald-900/90 text-emerald-300 border border-emerald-700 text-[10px] px-2 py-0.5 rounded flex items-center gap-1 font-semibold animate-bounce">
                     <CheckCircle2 className="w-3 h-3" />
-                    <span>Kaydedildi!</span>
+                    <span>{e.notesSaved}</span>
                   </span>
                 )}
               </div>
               <p className="text-[11px] text-slate-400">
-                Notlar belgenin alt kısmında (Notes & Special Remarks) canlı olarak yayınlanır.
+                {e.notesLead}
               </p>
             </div>
 
@@ -725,7 +761,7 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
                   setNotesText(e.target.value);
                   markDirty();
                 }}
-                placeholder="Bu belgeye özel teslimat şartları, banka açıklamaları veya gümrük notları yazın..."
+                placeholder={e.notesPlaceholder}
                 rows={3}
                 className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-xs text-amber-100 placeholder:text-slate-500 focus:outline-none focus:border-amber-500 font-sans leading-relaxed"
               />
@@ -735,9 +771,9 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
                 <div className="flex items-center space-x-2">
                   <span className="text-[11px] text-slate-400 font-medium flex items-center gap-1">
                     <Sparkles className="w-3 h-3 text-amber-400" />
-                    <span>Hazır Şablonlar:</span>
+                    <span>{e.presets}</span>
                   </span>
-                  {(DEFAULT_PRESET_NOTES[docType] || []).map((preset, idx) => (
+                  {(messages[docLang].presets[docType] || []).map((preset, idx) => (
                     <button
                       key={idx}
                       type="button"
@@ -747,7 +783,7 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
                       }}
                       className="px-2.5 py-1 bg-slate-700 hover:bg-amber-900/50 hover:text-amber-200 text-slate-300 text-[10px] rounded border border-slate-600 transition-colors"
                     >
-                      Şablon {idx + 1}
+                      {e.preset(idx + 1)}
                     </button>
                   ))}
                 </div>
@@ -761,7 +797,7 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
                       className="px-3 py-1.5 bg-red-950/80 hover:bg-red-900 text-red-200 text-xs font-semibold rounded-lg border border-red-800 flex items-center space-x-1.5 transition-colors"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
-                      <span>Notu Sil</span>
+                      <span>{e.deleteNote}</span>
                     </button>
                   )}
 
@@ -771,7 +807,7 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
                     className="px-4 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold rounded-lg flex items-center space-x-1.5 shadow-sm transition-colors"
                   >
                     <Save className="w-3.5 h-3.5" />
-                    <span>Notu Kaydet</span>
+                    <span>{e.saveNote}</span>
                   </button>
                 </div>
               </div>
@@ -782,45 +818,82 @@ export const DocumentEditorModal: React.FC<DocumentEditorModalProps> = ({
         {/* Status Bar */}
         <div className="bg-slate-100 border-b border-slate-200 px-6 py-2.5 flex items-center justify-between text-xs shrink-0">
           <div className="flex items-center space-x-3">
-            <span className="font-semibold text-slate-700">Belge Durumu:</span>
+            <span className="font-semibold text-slate-700">{e.status}</span>
             <select
               value={currentStatus}
               onChange={(e) => handleStatusChange(e.target.value as DocStatus)}
               className="border border-slate-300 rounded px-2 py-1 font-bold bg-white text-xs"
             >
-              <option value="taslak">Taslak</option>
-              <option value="hazir">Hazır</option>
-              <option value="onaylandi">Onaylandı</option>
-              <option value="eksik">Eksik</option>
+              <option value="taslak">{t.docStatus.taslak}</option>
+              <option value="hazir">{t.docStatus.hazir}</option>
+              <option value="onaylandi">{t.docStatus.onaylandi}</option>
+              <option value="eksik">{t.docStatus.eksik}</option>
             </select>
           </div>
 
           <div className="text-slate-500 italic text-[11px]">
-            * Şablon değişikliği ve görsel ekleme ticari veriyi değiştirmez, sadece sunum ve PDF katmanını günceller.
+            {e.footnote}
           </div>
         </div>
 
-        {/* Live A4 Preview Container */}
-        <div className="flex-1 overflow-y-auto p-8 bg-slate-200/80 flex justify-center">
+        {/* Live A4 Preview Container. The checks above the page are not part of the PDF. */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-8 bg-slate-200/80 flex flex-col items-center gap-4">
+          <section aria-label={t.issues.title} className="w-full max-w-[800px] space-y-2 text-xs">
+            <p className="font-semibold text-slate-700">{resolved.content.basis === 'ordered' ? t.approval.basisOrdered : t.approval.basisLoaded}</p>
+            {resolved.frozen && docInfo.approved && (
+              <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-emerald-900 space-y-2">
+                <p>{t.approval.frozen(docInfo.approved.revision, docInfo.approved.approvedAt)}</p>
+                {resolved.changes.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-2 rounded border border-amber-300 bg-amber-50 px-2 py-1.5 text-amber-900">
+                    <span className="flex-1">{t.approval.changed(resolved.changes.map((a) => t.approval.areas[a]).join(', '))}</span>
+                    {onReviseDocument && (
+                      <button type="button" onClick={handleCreateRevision} className="rounded bg-amber-600 px-2.5 py-1 font-bold text-white hover:bg-amber-500">
+                        {t.approval.createRevision}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+            {currentStatus === 'onaylandi' && !docInfo.approved && (
+              <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-amber-900">{t.approval.legacyApproved}</p>
+            )}
+            {currentStatus !== 'onaylandi' && <p className="text-slate-600">{t.approval.approveNote}</p>}
+            {blockedIssues && (
+              <div role="alert" className="space-y-1.5">
+                <p className="font-bold text-red-800">{t.approval.blocked}</p>
+                <IssueList issues={blockedIssues} compact />
+              </div>
+            )}
+            {!blockedIssues && <IssueList issues={resolved.content.issues} compact />}
+            {(docInfo.history?.length ?? 0) > 0 && (
+              <details className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-700">
+                <summary className="cursor-pointer font-semibold">{t.approval.history(docInfo.history!.length)}</summary>
+                <ul className="mt-1 space-y-0.5">
+                  {docInfo.history!.map((h) => (
+                    <li key={`${h.revision}-${h.approvedAt}`}>
+                      {t.approval.historyItem(h.revision, h.approvedAt, h.supersededAt ?? '—')}
+                      {h.supersededReason ? ` · ${h.supersededReason}` : ''}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
+            {resultNote && (
+              <p role="status" className={`font-semibold ${resultNote.ok ? 'text-emerald-700' : 'text-red-700'}`}>
+                {resultNote.text}
+              </p>
+            )}
+          </section>
+
           <div ref={documentRef} className="w-full max-w-[800px] bg-white shadow-lg rounded-sm">
             <DocumentRenderer
-              shipment={{
-                ...shipment,
-                items,
-                documents: {
-                  ...shipment.documents,
-                  [docType]: {
-                    ...docInfo,
-                    notes: notesText,
-                    template: currentTemplate,
-                    status: currentStatus,
-                  },
-                },
-              }}
+              shipment={previewShipment}
               docType={docType}
               template={currentTemplate}
               companySettings={companySettings}
               showImagesOverride={showImages}
+              lang={docLang}
             />
           </div>
         </div>

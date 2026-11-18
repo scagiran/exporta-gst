@@ -74,9 +74,15 @@ export interface ShipmentItem {
 }
 
 export interface LogisticsInfo {
-  incoterm: 'EXW' | 'FOB' | 'CFR' | 'CIF' | 'DDP' | 'DAP' | 'CPT' | 'CIP';
+  incoterm: 'EXW' | 'FCA' | 'FOB' | 'CFR' | 'CIF' | 'DDP' | 'DAP' | 'CPT' | 'CIP';
+  /** Incoterms® named place (e.g. "FOB Ambarlı"). Kept apart from the ports below. */
+  namedPlace?: string;
+  /** Place / port / airport of loading, depending on the transport mode. */
   loadingPort: string;
+  /** Place / port / airport of discharge or final destination. */
   dischargePort: string;
+  /** Destination country; may differ from the buyer's country. */
+  destinationCountry?: string;
   transportMode: 'Sea' | 'Air' | 'Road' | 'Rail';
   carrierCompany: string;
   vesselFlightNo: string;
@@ -114,6 +120,24 @@ export interface DocumentInfo {
   notes?: string;
   showImages?: boolean;
   presentationImageUrl?: string;
+  /** Language the document is issued in. Unset: the language of the interface. */
+  lang?: 'tr' | 'en' | 'fr';
+  /** Current revision number; 0 for the first issue. */
+  revision?: number;
+  /** Frozen content of the approved version. Present only while status is 'onaylandi'. */
+  approved?: ApprovedVersion;
+  /** Earlier approved versions, newest first. Never rewritten. */
+  history?: ApprovedVersion[];
+}
+
+/** The commercial content of a document at the moment it was approved. */
+export interface ApprovedVersion {
+  revision: number;
+  approvedAt: string;
+  /** When a newer revision replaced it. */
+  supersededAt?: string;
+  supersededReason?: string;
+  content: import('../lib/commerce').DocContent;
 }
 
 export interface MasterShipment {
@@ -128,7 +152,14 @@ export interface MasterShipment {
   documents: Record<DocType, DocumentInfo>;
   actualLoadingEntered: boolean;
   actualLoadingDate?: string;
+  /** Legacy field: older versions stored the declared VGM here. Read through vgmKg. */
   totalVgmKg?: number;
+  /** Declared VGM of the packed container (cargo gross + container tare). */
+  vgmKg?: number;
+  /** Cargo gross weight from a weighbridge ticket, container tare excluded. */
+  measuredCargoGrossKg?: number;
+  /** Empty container weight. */
+  containerTareKg?: number;
   notes?: string;
   customFields?: Record<string, string | number | boolean>;
   createdAt: string;
@@ -160,6 +191,8 @@ export interface CompanySettings {
   iban: string;
   swiftCode: string;
   defaultTemplates: Record<DocType, DocTemplate>;
+  /** The company's own VGM / weighbridge warning threshold in percent (default 5). Not a legal tolerance. */
+  vgmWarningTolerancePct?: number;
 }
 
 export interface OnboardingStep {
@@ -191,4 +224,6 @@ export interface OrgPreferences {
   numberHistory: DocNumberHistory[];
   notes: NoteItem[];
   onboardingSteps: OnboardingStep[];
+  /** Highest shipment sequence ever issued per year, so a deleted shipment's code is not reused. */
+  shipmentSeqHighWater?: Record<string, number>;
 }

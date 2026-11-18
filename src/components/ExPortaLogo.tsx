@@ -1,4 +1,5 @@
 import React from 'react';
+import { useLang } from '../i18n';
 
 interface ExPortaLogoProps {
   variant?: 'dark' | 'light';
@@ -15,6 +16,7 @@ export const ExPortaLogo: React.FC<ExPortaLogoProps> = ({
   isCollapsedMark = false,
   className = '',
 }) => {
+  const { t } = useLang();
   const textColor = variant === 'light' ? '#FFFFFF' : '#0F2B48';
   const arcColor = variant === 'light' ? '#2DD4BF' : '#0D9488';
 
@@ -85,7 +87,7 @@ export const ExPortaLogo: React.FC<ExPortaLogoProps> = ({
             }`}
             style={subtitleFont}
           >
-            B2B Dış Ticaret Platformu
+            {t.common.logoSubtitle}
           </span>
         )}
       </div>

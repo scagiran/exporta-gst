@@ -1,14 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Menu, X } from 'lucide-react';
 import { ExPortaLogo } from '../ExPortaLogo';
-
-const LINKS = [
-  { href: '#rota', label: 'Nasıl çalışır' },
-  { href: '#tur', label: 'Ürün turu' },
-  { href: '#ozellikler', label: 'Özellikler' },
-  { href: '#fiyatlar', label: 'Fiyatlar' },
-  { href: '#sss', label: 'SSS' },
-];
+import { LangSwitch } from '../LangSwitch';
+import { useLang } from '../../i18n';
 
 interface LandingNavProps {
   onSignup: () => void;
@@ -17,9 +11,18 @@ interface LandingNavProps {
 }
 
 export const LandingNav: React.FC<LandingNavProps> = ({ onSignup, onSignin, onDemo }) => {
+  const { t } = useLang();
   const [paper, setPaper] = useState(false);
   const [open, setOpen] = useState(false);
   const paperRef = useRef(false);
+
+  const links = [
+    { href: '#rota', label: t.nav.links.how },
+    { href: '#tur', label: t.nav.links.tour },
+    { href: '#ozellikler', label: t.nav.links.features },
+    { href: '#fiyatlar', label: t.nav.links.pricing },
+    { href: '#sss', label: t.nav.links.faq },
+  ];
 
   // Light text over the film, paper once the page proper begins.
   useEffect(() => {
@@ -58,19 +61,19 @@ export const LandingNav: React.FC<LandingNavProps> = ({ onSignup, onSignin, onDe
 
   return (
     <>
-      <nav className={`xp-nav${dark ? ' is-paper' : ''}`} aria-label="Ana menü">
+      <nav className={`xp-nav${dark ? ' is-paper' : ''}`} aria-label={t.nav.main}>
         <div className="xp-wrap xp-nav-in">
           <button
             type="button"
             className="xp-brand"
             onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-            aria-label="ExPorta, sayfanın başına dön"
+            aria-label={t.nav.home}
           >
             <ExPortaLogo variant={dark ? 'dark' : 'light'} size="md" />
           </button>
 
           <ul className="xp-nav-links">
-            {LINKS.map((l) => (
+            {links.map((l) => (
               <li key={l.href}>
                 <a href={l.href}>{l.label}</a>
               </li>
@@ -78,14 +81,15 @@ export const LandingNav: React.FC<LandingNavProps> = ({ onSignup, onSignin, onDe
           </ul>
 
           <div className="xp-nav-cta">
-            <button type="button" className="xp-nav-demo xp-hide-sm" onClick={onDemo}>
-              Demoyu incele
+            <LangSwitch className="xp-hide-sm" />
+            <button type="button" className="xp-nav-demo" onClick={onDemo}>
+              {t.nav.demo}
             </button>
             <button type="button" className="xp-btn is-sm is-line-nav xp-hide-sm" onClick={onSignin}>
-              Giriş yap
+              {t.nav.signin}
             </button>
             <button type="button" className="xp-btn is-sm is-gate" onClick={onSignup}>
-              Ücretsiz hesap aç
+              {t.nav.signupShort}
             </button>
             <button
               type="button"
@@ -93,7 +97,7 @@ export const LandingNav: React.FC<LandingNavProps> = ({ onSignup, onSignin, onDe
               onClick={() => setOpen((v) => !v)}
               aria-expanded={open}
               aria-controls="xp-mobile-menu"
-              aria-label={open ? 'Menüyü kapat' : 'Menüyü aç'}
+              aria-label={open ? t.nav.closeMenu : t.nav.openMenu}
             >
               {open ? <X aria-hidden="true" /> : <Menu aria-hidden="true" />}
             </button>
@@ -103,7 +107,7 @@ export const LandingNav: React.FC<LandingNavProps> = ({ onSignup, onSignin, onDe
 
       <div id="xp-mobile-menu" className={`xp-sheet-menu${open ? ' is-open' : ''}`} aria-hidden={!open}>
         <ul>
-          {LINKS.map((l) => (
+          {links.map((l) => (
             <li key={l.href}>
               <a href={l.href} onClick={close} tabIndex={open ? 0 : -1}>
                 {l.label}
@@ -111,6 +115,7 @@ export const LandingNav: React.FC<LandingNavProps> = ({ onSignup, onSignin, onDe
             </li>
           ))}
         </ul>
+        <LangSwitch className="is-sheet" tabIndex={open ? 0 : -1} />
         <div className="xp-sheet-actions">
           <button
             type="button"
@@ -121,7 +126,7 @@ export const LandingNav: React.FC<LandingNavProps> = ({ onSignup, onSignin, onDe
               onSignin();
             }}
           >
-            Giriş yap
+            {t.nav.signin}
           </button>
           <button
             type="button"
@@ -132,7 +137,7 @@ export const LandingNav: React.FC<LandingNavProps> = ({ onSignup, onSignin, onDe
               onDemo();
             }}
           >
-            Demoyu incele
+            {t.nav.demo}
           </button>
         </div>
       </div>

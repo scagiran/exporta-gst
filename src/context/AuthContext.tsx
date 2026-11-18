@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
-import { supabase } from '../lib/supabase';
+import { supabase, supabaseConfigured } from '../lib/supabase';
+import { useLang } from '../i18n';
 
 export interface Organization {
   id: string;
@@ -30,6 +31,8 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { t } = useLang();
+  const a = t.auth;
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [organization, setOrganization] = useState<Organization | null>(null);
@@ -85,7 +88,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // the insert committed, but reading the row back was blocked by the SELECT
       // policy (which requires a membership that did not exist yet), so the
       // membership insert never ran.
-      const defaultOrgName = userEmail ? `${userEmail.split('@')[0].toUpperCase()} İhracat` : 'İhracat Firmam';
+      const defaultOrgName = userEmail ? a.orgDefault(userEmail.split('@')[0].toUpperCase()) : a.orgFallback;
 
       const { data: newOrgId, error: createOrgErr } = await supabase.rpc(
         'create_org_for_current_user',
@@ -135,6 +138,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const signIn = async (email: string, pass: string) => {
+    // A build without a database must say so instead of failing with a network error.
+    if (!supabaseConfigured) return { error: new Error(a.notConfigured) };
     setLoading(true);
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
@@ -149,6 +154,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signUp = async (email: string, pass: string, companyName: string) => {
+    if (!supabaseConfigured) return { error: new Error(a.notConfigured) };
     setLoading(true);
     const { data, error } = await supabase.auth.signUp({
       email,
@@ -157,7 +163,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     if (error || !data.user) {
       setLoading(false);
-      return { error: error || new Error('Kullanıcı kaydı başarısız oldu') };
+      return { error: error || new Error(a.signupFailed) };
     }
 
     // Without an active session the RPC below cannot run (auth.uid() is null).
@@ -169,7 +175,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { error: null, needsEmailConfirmation: true };
     }
 
-    const orgName = companyName || 'İhracat Şirketim';
+    const orgName = companyName || a.orgFallbackSignup;
     const { data: newOrgId, error: orgError } = await supabase.rpc(
       'create_org_for_current_user',
       { org_name: orgName }
@@ -179,9 +185,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.error('[ExPorta] Kayıt sırasında organizasyon oluşturulamadı:', orgError?.message, orgError);
       setLoading(false);
       return {
-        error: new Error(
-          `Hesabınız oluşturuldu ancak şirket kaydınız açılamadı: ${orgError?.message || 'bilinmeyen hata'}`
-        ),
+        error: new Error(a.orgFailed(orgError?.message || a.unknownError)),
       };
     }
 

@@ -7,6 +7,7 @@ import { JourneySection } from './landing/JourneySection';
 import { TourSection, FeaturesSection, AboutSection } from './landing/ProductSections';
 import { PricingSection, FaqSection, AccountSection, LandingFooter } from './landing/ConvertSections';
 import type { AuthMode } from './AuthForm';
+import { useLang } from '../i18n';
 
 interface LandingPageProps {
   onStartDemo: () => void;
@@ -17,6 +18,7 @@ interface LandingPageProps {
  * account section (#hesap), opened on the sign-up or sign-in tab.
  */
 export const LandingPage: React.FC<LandingPageProps> = ({ onStartDemo }) => {
+  const { t } = useLang();
   const rootRef = useRef<HTMLDivElement>(null);
   const [authMode, setAuthMode] = useState<AuthMode>('signup');
 
@@ -29,6 +31,22 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartDemo }) => {
   };
   const onSignup = () => goAccount('signup');
   const onSignin = () => goAccount('signin');
+
+  // A link such as /fr/#tur or /en/#fiyatlar opens at that section. The page is
+  // built by script, so the browser's own jump happens too early; it is redone
+  // once the layout and the fonts are in place.
+  useEffect(() => {
+    const id = decodeURIComponent(window.location.hash.slice(1));
+    if (!id) return;
+    const jump = () => document.getElementById(id)?.scrollIntoView({ behavior: 'auto', block: 'start' });
+    const raf = requestAnimationFrame(() => requestAnimationFrame(jump));
+    document.fonts?.ready.then(jump).catch(() => undefined);
+    const late = window.setTimeout(jump, 600);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.clearTimeout(late);
+    };
+  }, []);
 
   // Entrances, living elements that rest off screen, and a pause on hidden tabs.
   useEffect(() => {
@@ -71,7 +89,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onStartDemo }) => {
   return (
     <div ref={rootRef} className="xp">
       <a className="xp-skip" href="#main">
-        İçeriğe geç
+        {t.nav.skip}
       </a>
       <div className="xp-env" aria-hidden="true">
         <div className="xp-tide" />

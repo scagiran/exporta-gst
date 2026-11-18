@@ -1,5 +1,6 @@
 import React from 'react';
 import { ExPortaLogo } from './ExPortaLogo';
+import { useLang } from '../i18n';
 import {
   LayoutDashboard,
   Users,
@@ -34,6 +35,8 @@ interface SidebarProps {
   shipmentCount: number;
   isCollapsed: boolean;
   setIsCollapsed: React.Dispatch<React.SetStateAction<boolean>>;
+  companyName?: string;
+  taxNo?: string;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -43,15 +46,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
   shipmentCount,
   isCollapsed,
   setIsCollapsed,
+  companyName = '',
+  taxNo = '',
 }) => {
+  const initials =
+    companyName
+      .split(/s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((w) => w[0])
+      .join('')
+      .toLocaleUpperCase() || '·';
+  const { t } = useLang();
+  const m = t.menu;
   const menuItems: { id: NavTab; label: string; icon: React.FC<{ className?: string }>; badge?: number }[] = [
-    { id: 'dashboard', label: 'Genel Bakış', icon: LayoutDashboard },
-    { id: 'shipments', label: 'Sevkiyatlar', icon: Ship, badge: shipmentCount },
-    { id: 'customers', label: 'Müşteriler', icon: Users },
-    { id: 'products', label: 'Ürünler', icon: Package },
-    { id: 'documents', label: 'Belgeler', icon: FileText },
-    { id: 'notes', label: 'Notlar', icon: StickyNote },
-    { id: 'settings', label: 'Ayarlar', icon: Settings },
+    { id: 'dashboard', label: m.dashboard, icon: LayoutDashboard },
+    { id: 'shipments', label: m.shipments, icon: Ship, badge: shipmentCount },
+    { id: 'customers', label: m.customers, icon: Users },
+    { id: 'products', label: m.products, icon: Package },
+    { id: 'documents', label: m.documents, icon: FileText },
+    { id: 'notes', label: m.notes, icon: StickyNote },
+    { id: 'settings', label: m.settings, icon: Settings },
   ];
 
   return (
@@ -78,7 +93,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <button
           onClick={() => setIsCollapsed((prev) => !prev)}
           className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-          title={isCollapsed ? 'Menüyü Genişlet' : 'Menüyü Daralt'}
+          title={isCollapsed ? m.expand : m.collapse}
         >
           {isCollapsed ? <PanelLeftOpen className="w-5 h-5 text-teal-400" /> : <PanelLeftClose className="w-5 h-5" />}
         </button>
@@ -88,13 +103,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="p-3">
         <button
           onClick={onNewShipmentClick}
-          title="+ Yeni Sevkiyat"
+          title={m.newShipment}
           className={`w-full py-2.5 bg-teal-600 hover:bg-teal-500 text-white font-semibold text-xs rounded-lg shadow-md shadow-teal-900/30 flex items-center justify-center transition-all transform active:scale-[0.98] ${
             isCollapsed ? 'px-2' : 'px-4 space-x-2'
           }`}
         >
           <PlusCircle className="w-5 h-5 shrink-0" />
-          {!isCollapsed && <span className="whitespace-nowrap">+ Yeni Sevkiyat</span>}
+          {!isCollapsed && <span className="whitespace-nowrap">{m.newShipment}</span>}
         </button>
       </div>
 
@@ -102,7 +117,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <nav className="flex-1 px-2 py-2 space-y-1 overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
         {!isCollapsed && (
           <div className="px-3 pb-2 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
-            ANA MENÜ
+            {m.title}
           </div>
         )}
         {menuItems.map((item) => {
@@ -141,7 +156,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="p-2 border-t border-slate-800">
         <button
           onClick={() => setActiveTab('landing')}
-          title={isCollapsed ? 'Tanıtım / Landing Page' : undefined}
+          title={isCollapsed ? m.landingTitle : undefined}
           className={`w-full flex items-center ${
             isCollapsed ? 'justify-center p-2' : 'justify-between px-3 py-2'
           } rounded-lg text-xs font-medium transition-colors ${
@@ -150,11 +165,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
         >
           <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'space-x-2'}`}>
             <Globe className="w-5 h-5 text-teal-400 shrink-0" />
-            {!isCollapsed && <span>Landing Page</span>}
+            {!isCollapsed && <span>{m.landing}</span>}
           </div>
           {!isCollapsed && (
             <span className="text-[10px] bg-slate-800 text-teal-400 px-1.5 py-0.5 rounded">
-              Tanıtım
+              {m.landingTag}
             </span>
           )}
         </button>
@@ -164,12 +179,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="p-3 border-t border-slate-800 bg-slate-950/50">
         <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'space-x-3'}`}>
           <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-teal-400 font-bold text-xs border border-slate-700 shrink-0">
-            Aİ
+            {initials}
           </div>
           {!isCollapsed && (
             <div className="overflow-hidden">
-              <p className="text-xs font-medium text-slate-200 truncate">Anadolu Dış Ticaret</p>
-              <p className="text-[10px] text-slate-500 truncate">VN: 0680123456</p>
+              <p className="text-xs font-medium text-slate-200 truncate">{companyName || '—'}</p>
+              {taxNo && <p className="text-[10px] text-slate-500 truncate">{m.taxIdShort}: {taxNo}</p>}
             </div>
           )}
         </div>

@@ -2,6 +2,7 @@ import React from 'react';
 import { OnboardingStep } from '../types/exporta';
 import { CheckCircle2, Circle, ArrowRight, Sparkles, ChevronRight } from 'lucide-react';
 import { NavTab } from './Sidebar';
+import { useLang } from '../i18n';
 
 interface OnboardingWidgetProps {
   steps: OnboardingStep[];
@@ -14,6 +15,9 @@ export const OnboardingWidget: React.FC<OnboardingWidgetProps> = ({
   onNavigateTab,
   onToggleStep,
 }) => {
+  const { t } = useLang();
+  const o = t.onboarding;
+  const titleOf = (step: OnboardingStep) => o.stepTitles[step.id - 1] ?? step.title;
   const completedCount = steps.filter((s) => s.completed).length;
   const progressPercent = Math.round((completedCount / steps.length) * 100);
 
@@ -26,24 +30,24 @@ export const OnboardingWidget: React.FC<OnboardingWidgetProps> = ({
         <div>
           <div className="flex items-center space-x-2">
             <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-teal-500/20 text-teal-400 border border-teal-500/30">
-              REHBERLİ BAŞLANGIÇ
+              {o.badge}
             </span>
-            <span className="text-xs text-slate-400">Contextual Onboarding</span>
+            <span className="text-xs text-slate-400">{o.badgeSub}</span>
           </div>
           <h2 className="text-xl font-bold text-white mt-1.5 flex items-center gap-2">
-            <span>İlk sevkiyatınızı 7 adımda tamamlayın</span>
+            <span>{o.title}</span>
             <Sparkles className="w-5 h-5 text-teal-400" />
           </h2>
           <p className="text-xs text-slate-300 mt-1">
-            Tek ortak veri kaynağında müşteri, ürün ve sevkiyat verisini tanımlayın; 7 ihraç belgenizi otomatik üretin.
+            {o.lead}
           </p>
         </div>
 
         {/* Progress Bar & Next Action CTA */}
-        <div className="bg-slate-800/80 p-4 rounded-xl border border-slate-700 shrink-0 text-right min-w-[240px]">
+        <div className="bg-slate-800/80 p-4 rounded-xl border border-slate-700 shrink-0 text-right sm:min-w-[240px]">
           <div className="flex justify-between items-center text-xs font-semibold text-slate-300 mb-1.5">
-            <span>İlerleme Durumu</span>
-            <span className="text-teal-400 font-mono">{completedCount} / {steps.length} Adım</span>
+            <span>{o.progress}</span>
+            <span className="text-teal-400 font-mono">{o.steps(completedCount, steps.length)}</span>
           </div>
           <div className="w-full bg-slate-700 h-2 rounded-full overflow-hidden mb-3">
             <div
@@ -55,7 +59,7 @@ export const OnboardingWidget: React.FC<OnboardingWidgetProps> = ({
             onClick={() => onNavigateTab(nextStep.actionRoute as NavTab)}
             className="w-full py-2 px-3 bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs rounded-lg flex items-center justify-center space-x-1.5 transition-all shadow-xs"
           >
-            <span>Şimdi Yap: {nextStep.title}</span>
+            <span>{o.doNow(titleOf(nextStep))}</span>
             <ArrowRight className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -85,7 +89,7 @@ export const OnboardingWidget: React.FC<OnboardingWidgetProps> = ({
                 )}
               </div>
               <h4 className={`text-xs font-semibold leading-tight line-clamp-2 ${step.completed ? 'text-slate-300 line-through' : 'text-white'}`}>
-                {step.title}
+                {titleOf(step)}
               </h4>
               <button
                 onClick={(e) => {
@@ -94,7 +98,7 @@ export const OnboardingWidget: React.FC<OnboardingWidgetProps> = ({
                 }}
                 className="mt-2 text-[10px] text-teal-400 font-medium hover:underline flex items-center"
               >
-                <span>Aç</span>
+                <span>{o.open}</span>
                 <ChevronRight className="w-3 h-3 ml-0.5" />
               </button>
             </div>

@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { useLang } from '../../i18n';
 
 const i = (n: number) => ({ '--i': n } as React.CSSProperties);
 
@@ -6,41 +7,44 @@ const i = (n: number) => ({ '--i': n } as React.CSSProperties);
 /* 2. One record, seven documents: the visitor changes one number      */
 /* ------------------------------------------------------------------ */
 
+/** Cartons on the order; the slider is the quantity actually loaded. */
+const ORDERED = 412;
 const KOLI_MIN = 200;
 const KOLI_MAX = 600;
 const GROSS_PER = 30.29; // kg per carton
 const NET_PER = 28.45;
 const PRICE_PER = 146; // EUR per carton
 
-const kg = new Intl.NumberFormat('tr-TR', { maximumFractionDigits: 0 });
-const eur = new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'EUR' });
-
 type Field = 'tutar' | 'koli' | 'brut' | 'net';
-const FIELD_LABEL: Record<Field, string> = { tutar: 'Tutar', koli: 'Koli', brut: 'Brüt ağırlık', net: 'Net ağırlık' };
 
-const SEVEN: { step: string; name: string; no: string; fields: Field[] }[] = [
-  { step: '01', name: 'Teklif', no: 'QT-2026-014', fields: ['tutar'] },
-  { step: '02', name: 'Proforma', no: 'PI-202610-ELEK-014', fields: ['tutar'] },
-  { step: '03', name: 'Satış Emri', no: 'SO-2026-014', fields: ['koli'] },
-  { step: '04', name: 'Gerçek Yükleme', no: 'AL-2026-014', fields: ['koli', 'brut'] },
-  { step: '05', name: 'Ticari Fatura', no: 'INV-2026-ELEK-014', fields: ['tutar', 'brut'] },
-  { step: '06', name: 'Çeki Listesi', no: 'PL-2026-014', fields: ['net', 'brut'] },
-  { step: '07', name: 'Konşimento Talimatı', no: 'SI-2026-014', fields: ['koli', 'brut'] },
+/** The seven documents in their sequence; names come from the messages, in the same order. */
+const SEVEN: { step: string; no: string; fields: Field[] }[] = [
+  { step: '01', no: 'QT-2026-014', fields: ['tutar'] },
+  { step: '02', no: 'PI-202610-ELEK-014', fields: ['tutar'] },
+  { step: '03', no: 'SO-2026-014', fields: ['koli'] },
+  { step: '04', no: 'AL-2026-014', fields: ['koli', 'brut'] },
+  { step: '05', no: 'INV-2026-ELEK-014', fields: ['tutar', 'brut'] },
+  { step: '06', no: 'PL-2026-014', fields: ['net', 'brut'] },
+  { step: '07', no: 'SI-2026-014', fields: ['koli', 'brut'] },
 ];
 
 export const OneRecordSection: React.FC = () => {
+  const { t, num, money } = useLang();
+  const o = t.one;
   const [koli, setKoli] = useState(412);
   const [ver, setVer] = useState(0);
 
-  const values = useMemo<Record<Field, string>>(
-    () => ({
-      koli: kg.format(koli),
-      brut: `${kg.format(koli * GROSS_PER)} kg`,
-      net: `${kg.format(koli * NET_PER)} kg`,
-      tutar: eur.format(koli * PRICE_PER),
-    }),
-    [koli]
-  );
+  const whole = (n: number) => num(n, { maximumFractionDigits: 0 });
+  // Order documents keep the ordered quantity; loading documents follow what was loaded.
+  const valuesFor = (cartons: number): Record<Field, string> => ({
+    koli: whole(cartons),
+    brut: `${whole(cartons * GROSS_PER)} kg`,
+    net: `${whole(cartons * NET_PER)} kg`,
+    tutar: money(cartons * PRICE_PER, 'EUR'),
+  });
+  const orderedValues = valuesFor(ORDERED);
+  const loadedValues = valuesFor(koli);
+  const twoDp = (n: number) => num(n, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   const change = (next: number) => {
     const v = Math.min(KOLI_MAX, Math.max(KOLI_MIN, Math.round(next)));
@@ -57,15 +61,14 @@ export const OneRecordSection: React.FC = () => {
         <div className="xp-one-head" data-reveal>
           <div>
             <p className="xp-label r" style={i(0)}>
-              ExPorta ile
+              {o.label}
             </p>
             <h2 id="tek-h" className="xp-h2 r" style={i(1)}>
-              Bir kez girin. Yedi belge birlikte güncellensin.
+              {o.title}
             </h2>
           </div>
           <p className="xp-lead r" style={i(2)}>
-            Müşteri, ürün ve yükleme bilgisi tek bir sevkiyat kaydında durur. Belgeler bu kayıttan üretildiği için hepsi
-            aynı rakamı taşır. Koli adedini değiştirip kendiniz görün.
+            {o.lead}
           </p>
         </div>
 
@@ -73,26 +76,26 @@ export const OneRecordSection: React.FC = () => {
           <div className="xp-master r" style={i(0)}>
             <div className="xp-master-top">
               <b>SHP-2026-014</b>
-              <span>Master sevkiyat</span>
+              <span>{o.master}</span>
             </div>
             <h3>ElektroTech GmbH</h3>
-            <p className="xp-master-meta">Hamburg, Almanya · FOB Mersin</p>
+            <p className="xp-master-meta">{o.meta}</p>
             <dl>
-              <dt>Ürün</dt>
-              <dd>Bakır kablo makarası</dd>
-              <dt>Koli başı brüt</dt>
-              <dd>30,29 kg</dd>
-              <dt>Koli başı net</dt>
-              <dd>28,45 kg</dd>
-              <dt>Birim fiyat</dt>
-              <dd>€146,00</dd>
+              <dt>{o.product}</dt>
+              <dd>{o.productName}</dd>
+              <dt>{o.grossPer}</dt>
+              <dd>{twoDp(GROSS_PER)} kg</dd>
+              <dt>{o.netPer}</dt>
+              <dd>{twoDp(NET_PER)} kg</dd>
+              <dt>{o.unitPrice}</dt>
+              <dd>{money(PRICE_PER, 'EUR')}</dd>
             </dl>
             <div className="xp-koli">
               <label htmlFor="koli-range">
-                Koli adedi <output htmlFor="koli-range">{kg.format(koli)}</output>
+                {o.cartons} <output htmlFor="koli-range">{whole(koli)}</output>
               </label>
               <div className="xp-koli-ctl">
-                <button type="button" onClick={() => change(koli - 1)} aria-label="Bir koli azalt">
+                <button type="button" onClick={() => change(koli - 1)} aria-label={o.fewer}>
                   −
                 </button>
                 <input
@@ -106,37 +109,36 @@ export const OneRecordSection: React.FC = () => {
                   onChange={(e) => change(Number(e.target.value))}
                   style={{ '--fill': fill } as React.CSSProperties}
                 />
-                <button type="button" onClick={() => change(koli + 1)} aria-label="Bir koli artır">
+                <button type="button" onClick={() => change(koli + 1)} aria-label={o.more}>
                   +
                 </button>
               </div>
-              <p className="xp-koli-hint">Kaydırın ya da düğmelere basın.</p>
+              <p className="xp-koli-hint">{o.hint}</p>
             </div>
           </div>
 
           <div className="r" style={i(1)}>
             <div className="xp-sync">
               <strong>
-                <span className="xp-sync-dot live" aria-hidden="true" />7 / 7 belge aynı rakamda
+                <span className="xp-sync-dot live" aria-hidden="true" />
+                {o.sync(whole(ORDERED), whole(koli))}
               </strong>
-              <span aria-live="polite">
-                {ver === 0 ? 'Koli: 412' : `Koli güncellendi: ${kg.format(koli)}`}
-              </span>
+              <span aria-live="polite">{ver === 0 ? o.live(whole(412)) : o.updated(whole(koli))}</span>
             </div>
             <ul className="xp-docs">
               {SEVEN.map((d, n) => (
                 <li key={d.no} className="xp-doc">
                   <div>
                     <span className="xp-doc-step">{d.step}</span>
-                    <h4>{d.name}</h4>
+                    <h4>{o.docs[n]}</h4>
                     <p className="xp-doc-no">{d.no}</p>
                   </div>
                   <div className="xp-doc-rows">
                     {d.fields.map((f) => (
                       <div key={f} className="xp-doc-row">
-                        <span>{FIELD_LABEL[f]}</span>
-                        <b key={`${f}-${ver}`} className={ver > 0 ? 'flash' : undefined} style={i(n)}>
-                          {values[f]}
+                        <span>{o.fields[f]}</span>
+                        <b key={`${f}-${n < 3 ? 0 : ver}`} className={ver > 0 && n >= 3 ? 'flash' : undefined} style={i(n)}>
+                          {(n < 3 ? orderedValues : loadedValues)[f]}
                         </b>
                       </div>
                     ))}
@@ -144,7 +146,7 @@ export const OneRecordSection: React.FC = () => {
                 </li>
               ))}
             </ul>
-            <p className="xp-one-note">Örnek veridir. Kendi hesabınızda kendi müşteri ve ürünleriniz yer alır.</p>
+            <p className="xp-one-note">{o.note}</p>
           </div>
         </div>
       </div>
@@ -156,23 +158,19 @@ export const OneRecordSection: React.FC = () => {
 /* 3. The route: seven stops joined by the logo's own arc              */
 /* ------------------------------------------------------------------ */
 
-const STOPS = [
-  { en: 'Quotation', tr: 'Teklif', line: 'Fiyat ve teslim şartı alıcıya gider.' },
-  { en: 'Proforma', tr: 'Ön fatura', line: 'Onaylanan teklif proformaya dönüşür.' },
-  { en: 'Sales Order', tr: 'Satış emri', line: 'Sipariş kesinleşir, hazırlık başlar.' },
-  { en: 'Actual Loading', tr: 'Gerçek yükleme', line: 'Kantardan gelen koli ve ağırlık burada girilir.', key: true },
-  { en: 'Commercial Invoice', tr: 'Ticari fatura', line: 'Yüklenen miktar üzerinden kesilir.' },
-  { en: 'Packing List', tr: 'Çeki listesi', line: 'Ağırlıklar faturayla birebir aynıdır.' },
-  { en: 'Shipping Instruction', tr: 'Konşimento talimatı', line: 'Taşıyıcıya aynı rakamlarla gider.' },
-];
+/** Seven stops; the fourth (actual loading) is where the weighbridge figures enter. */
+const STOP_COUNT = 7;
+const KEY_STOP = 3;
 
 const X = (n: number) => 100 + n * 200;
 const BASE_Y = 118;
-const ROUTE_D = STOPS.slice(1)
+const ROUTE_D = Array.from({ length: STOP_COUNT - 1 })
   .map((_, n) => `Q${X(n) + 100} 18 ${X(n + 1)} ${BASE_Y}`)
   .reduce((d, seg) => `${d} ${seg}`, `M${X(0)} ${BASE_Y}`);
 
 export const RouteSection: React.FC = () => {
+  const { t } = useLang();
+  const r = t.route;
   const blockRef = useRef<HTMLDivElement>(null);
   const drawnRef = useRef<SVGPathElement>(null);
   const shipRef = useRef<SVGGElement>(null);
@@ -247,13 +245,13 @@ export const RouteSection: React.FC = () => {
       <div className="xp-wrap">
         <div className="xp-route-head" data-reveal>
           <p className="xp-label r" style={i(0)}>
-            Nasıl çalışır
+            {r.label}
           </p>
           <h2 id="rota-h" className="xp-h2 r" style={i(1)}>
-            Tekliften talimata, yedi durak.
+            {r.title}
           </h2>
           <p className="xp-lead r" style={i(2)}>
-            Her sevkiyat aynı rotadan geçer. Bir durakta girdiğiniz bilgi sonraki duraklara kendiliğinden taşınır.
+            {r.lead}
           </p>
         </div>
 
@@ -261,8 +259,8 @@ export const RouteSection: React.FC = () => {
           <svg className="xp-route-svg" viewBox="0 0 1400 150" aria-hidden="true">
             <path className="ghost" d={ROUTE_D} />
             <path ref={drawnRef} className="drawn" d={ROUTE_D} />
-            {STOPS.map((s, n) => (
-              <circle key={s.en} className="stop" cx={X(n)} cy={BASE_Y} r="9" />
+            {r.stops.map((_, n) => (
+              <circle key={n} className="stop" cx={X(n)} cy={BASE_Y} r="9" />
             ))}
             <g ref={shipRef} transform={`translate(${X(0)} ${BASE_Y})`}>
               <circle className="halo live" r="10" />
@@ -270,22 +268,22 @@ export const RouteSection: React.FC = () => {
             </g>
           </svg>
           <ol className="xp-stops">
-            {STOPS.map((s, n) => (
-              <li key={s.en} className={s.key ? 'is-key' : undefined}>
+            {r.stops.map((s, n) => (
+              <li key={n} className={n === KEY_STOP ? 'is-key' : undefined}>
                 <span className="xp-stop-no">0{n + 1}</span>
-                <strong>{s.en}</strong>
-                <em>{s.tr}</em>
+                <strong>{s.primary}</strong>
+                <em>{s.secondary}</em>
                 <p>{s.line}</p>
               </li>
             ))}
           </ol>
           <ol ref={vListRef} className="xp-route-vertical">
-            {STOPS.map((s, n) => (
-              <li key={s.en}>
+            {r.stops.map((s, n) => (
+              <li key={n}>
                 <span>
-                  0{n + 1} · {s.en}
+                  0{n + 1} · {s.primary}
                 </span>
-                <strong>{s.tr}</strong>
+                <strong>{s.secondary}</strong>
                 <p>{s.line}</p>
               </li>
             ))}
